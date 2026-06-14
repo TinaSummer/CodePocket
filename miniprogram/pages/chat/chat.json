@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "对话",
+  "usingComponents": {
+    "phone-action-modal": "/components/phone-action-modal/phone-action-modal"
+  }
+}

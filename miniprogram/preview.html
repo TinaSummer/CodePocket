@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CodePocket Chat Preview</title>
+<style>
+:root {
+  --bg-base: #ffffff;
+  --bg-1: #f7f8fa;
+  --bg-2: #f2f3f5;
+  --bg-3: #e5e6eb;
+  --bg-4: #c9cdd4;
+  --bg-hover: #f2f3f5;
+  --bg-active: #e5e6eb;
+  --text-1: #1d2129;
+  --text-2: #4e5969;
+  --text-3: #86909c;
+  --text-4: #c9cdd4;
+  --primary: #165dff;
+  --primary-bg: #e8f0ff;
+  --success: #00a856;
+  --warning: #ff7d00;
+  --danger: #f53f3f;
+  --warning-bg: #fff7e8;
+  --danger-bg: #ffece8;
+  --border-1: #e5e6eb;
+  --border-2: #e5e6eb;
+  --brand-start: #667eea;
+  --brand-end: #764ba2;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f2f3f5;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  background: var(--bg-base);
+  border-radius: 40px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Nav bar */
+.nav-bar {
+  height: 88px;
+  padding: 44px 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-base);
+  border-bottom: 0.5px solid var(--border-2);
+  flex-shrink: 0;
+}
+.nav-bar h1 { font-size: 17px; font-weight: 600; color: var(--text-1); }
+
+/* Chat messages area */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Status line */
+.status-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 0;
+  margin-bottom: 8px;
+}
+.status-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+.status-dot-warning { background: var(--warning); animation: blink 2s ease-in-out infinite; }
+.status-text { font-size: 11px; color: var(--text-3); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* Message */
+.msg { margin-bottom: 16px; }
+.msg.agent { display: flex; flex-direction: column; align-items: flex-start; padding-right: 16px; }
+.msg.user { display: flex; flex-direction: column; align-items: flex-end; padding-right: 8px; }
+
+/* Agent blocks */
+.msg-blocks { max-width: 100%; width: 100%; overflow: hidden; }
+
+/* Text content */
+.msg-text-block { position: relative; }
+.msg-content { max-width: 100%; overflow: hidden; }
+.msg-text { font-size: 14px; line-height: 1.75; color: var(--text-1); word-break: break-word; }
+
+/* Copy button */
+.msg-copy-btn {
+  position: absolute; top: 4px; right: 4px;
+  width: 28px; height: 28px; border-radius: 6px;
+  background: var(--bg-2); display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.2s;
+  cursor: pointer; border: none;
+}
+.msg-text-block:hover .msg-copy-btn { opacity: 1; }
+.copy-icon {
+  width: 12px; height: 14px; border: 2px solid var(--text-3); border-radius: 2px; position: relative;
+}
+.copy-icon::after {
+  content:''; position: absolute; top: -4px; left: -4px;
+  width: 12px; height: 14px; border: 2px solid var(--text-3); border-radius: 2px;
+  border-bottom: none; border-right: none;
+}
+
+/* Code block */
+.code-block { background: #f6f8fa; border-radius: 8px; margin: 8px 0; overflow: hidden; }
+.code-header { display: flex; padding: 6px 12px; border-bottom: 1px solid rgba(0,0,0,0.06); }
+.code-lang { font-size: 11px; font-family: 'SF Mono', Menlo, monospace; color: var(--text-3); }
+.code-text { padding: 10px 12px; overflow-x: auto; }
+.code-text pre {
+  font-size: 12px; font-family: 'SF Mono', Menlo, monospace;
+  line-height: 1.6; color: var(--text-1); white-space: pre-wrap; word-break: break-all;
+}
+
+/* ═══ Thinking block (in-message) ═══ */
+.thinking-block { width: 100%; }
+.thinking-block-divider { border: none; border-top: 1px solid var(--border-2); margin: 4px 0; }
+.thinking-block-header {
+  display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer;
+}
+.thinking-block-arrow {
+  width: 0; height: 0; border-left: 7px solid var(--text-3);
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform 0.2s; flex-shrink: 0;
+}
+.thinking-block-arrow.expanded { transform: rotate(90deg); }
+.thinking-block-summary {
+  font-size: 11px; color: var(--text-3); font-style: italic;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.thinking-block-body {
+  color: var(--text-3); font-style: italic; font-size: 12px; line-height: 1.6;
+  padding: 4px 0; white-space: pre-wrap; word-break: break-word; overflow: hidden;
+}
+
+/* ═══ Tool group — "View Steps" ═══ */
+.tool-group { margin: 8px 0; }
+.tool-group-header {
+  display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+  background: var(--bg-2); border-radius: 8px; cursor: pointer;
+  transition: background 0.15s;
+}
+.tool-group-header:hover { background: var(--bg-3); }
+.tool-group-icon {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--bg-4);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.tool-group-icon span { font-size: 10px; font-weight: 600; color: var(--text-3); }
+.tool-group-label { font-size: 12px; color: var(--text-3); font-weight: 500; flex: 1; }
+.tool-group-body {
+  padding: 6px 0 6px 12px; border-left: 1px solid var(--border-2);
+  margin-left: 10px; margin-top: 4px; animation: expand-fade 0.2s ease-out;
+}
+.tool-group-item { display: flex; flex-direction: column; }
+.tool-group-item + .tool-group-item { margin-top: 4px; }
+.tool-group-item-header {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  border-radius: 6px; cursor: pointer; transition: background 0.15s;
+}
+.tool-group-item-header:hover { background: var(--bg-2); }
+.tool-group-item-body { padding: 6px 8px 8px; animation: expand-fade 0.2s ease-out; }
+
+/* ═══ Tool call cards (single) ═══ */
+.tool-card {
+  background: var(--bg-2); border-radius: 10px; margin: 8px 0;
+  overflow: hidden; border: 1px solid var(--border-1);
+  border-left: 4px solid var(--border-1); transition: border-color 0.2s;
+}
+.tool-card.running { border-left-color: var(--primary); background: rgba(22,93,255,0.03); }
+.tool-card.completed { border-left-color: var(--bg-4); }
+.tool-card.expanded { border-left-color: var(--primary); }
+.tool-card-header {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px; min-height: 20px;
+  cursor: pointer;
+}
+
+/* CSS status dots */
+.tool-status-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: background 0.2s;
+}
+.tool-status-dot.running { background: var(--primary); animation: dot-breathing 1.5s ease-in-out infinite; }
+.tool-status-dot.completed { background: var(--success); }
+.tool-status-dot.error { background: var(--danger); }
+@keyframes dot-breathing { 0%,100%{opacity:.4;transform:scale(.85)} 50%{opacity:1;transform:scale(1)} }
+
+.tool-name {
+  font-size: 12px; font-family: 'SF Mono', Menlo, monospace;
+  font-weight: 500; color: var(--text-2); flex-shrink: 0;
+}
+.tool-param-summary {
+  font-size: 11px; font-family: 'SF Mono', Menlo, monospace;
+  color: var(--text-3); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; flex: 1;
+}
+.tool-chevron {
+  width: 0; height: 0; border-left: 6px solid var(--text-4);
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  flex-shrink: 0; transition: transform 0.2s;
+}
+.tool-chevron.up { transform: rotate(90deg); }
+
+.tool-card-body {
+  padding: 0 12px 10px; border-top: 1px solid var(--border-2);
+  animation: expand-fade 0.2s ease-out;
+}
+
+/* Input display */
+.tool-input-display {
+  margin-top: 8px; padding: 6px 10px; background: var(--bg-2);
+  border-radius: 6px; display: flex; flex-direction: column; gap: 2px;
+}
+.tool-input-label {
+  font-size: 10px; color: var(--text-4); font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.tool-input-text {
+  font-size: 11px; font-family: 'SF Mono', Menlo, monospace;
+  color: var(--text-2); line-height: 1.5; word-break: break-all;
+}
+
+/* Tool result with collapsible */
+.tool-result-wrapper { margin-top: 8px; }
+.tool-result {
+  background: #f6f8fa; border-radius: 6px; padding: 10px 12px;
+  position: relative; overflow: hidden; transition: max-height 0.3s;
+}
+.tool-result-collapsed { max-height: 120px; }
+.tool-result-mask {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 40px;
+  background: linear-gradient(to bottom, rgba(246,248,250,0), rgba(246,248,250,0.6) 40%, rgba(246,248,250,0.95) 80%, rgba(246,248,250,1) 100%);
+  pointer-events: none;
+}
+.tool-result pre {
+  font-size: 12px; font-family: 'SF Mono', Menlo, monospace;
+  color: var(--text-2); line-height: 1.5; white-space: pre-wrap; word-break: break-all;
+}
+.tool-result.error { background: var(--danger-bg); border: 1px solid rgba(245,63,63,0.12); }
+.tool-result.error pre { color: var(--danger); }
+.tool-result-toggle {
+  display: flex; justify-content: center; padding: 6px 0 2px; cursor: pointer;
+}
+.tool-result-toggle span { font-size: 11px; color: var(--primary); font-weight: 500; }
+
+/* Diff */
+.diff-view { margin-top: 8px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-1); }
+.diff-file {
+  padding: 6px 10px; background: #f1f5f9; font-size: 11px;
+  font-family: 'SF Mono', Menlo, monospace; color: var(--text-2);
+  border-bottom: 1px solid var(--border-1); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.diff-content { padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; }
+.diff-line {
+  font-size: 11px; font-family: 'SF Mono', Menlo, monospace;
+  padding: 2px 8px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+}
+.diff-line-old { color: #b91c1c; background: rgba(254,226,226,0.6); }
+.diff-line-new { color: #15803d; background: rgba(220,252,231,0.6); }
+
+/* Permission card */
+.perm-card {
+  background: var(--warning-bg); border: 1px solid rgba(255,125,0,0.15);
+  border-radius: 12px; padding: 14px; margin: 8px 0; max-width: 85%;
+  animation: fade-in 0.25s ease-out;
+}
+.perm-title {
+  font-size: 11px; font-weight: 600; color: var(--warning);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;
+}
+.perm-detail {
+  font-size: 12px; color: var(--text-2); margin-bottom: 14px;
+  font-family: 'SF Mono', Menlo, monospace; background: var(--bg-2);
+  padding: 8px 10px; border-radius: 4px; line-height: 1.5; word-break: break-all;
+}
+.perm-actions { display: flex; gap: 8px; margin-top: 6px; }
+.perm-btn {
+  flex: 1; font-size: 13px; font-weight: 600; padding: 10px 0;
+  border-radius: 8px; border: none; text-align: center; cursor: pointer;
+  transition: transform 0.1s;
+}
+.perm-btn:active { transform: scale(0.97); }
+.perm-btn-allow { background: #fff; color: #00a856; border: 1px solid rgba(0,168,86,0.2); }
+.perm-btn-deny { background: var(--bg-base); color: var(--danger); border: 1px solid rgba(245,63,63,0.2); }
+
+/* User bubble */
+.msg-bubble-wrapper { display: flex; flex-direction: column; align-items: flex-end; max-width: 85%; }
+.msg-bubble {
+  max-width: 100%; padding: 10px 14px; font-size: 14px; line-height: 1.7;
+  word-break: break-word; background: var(--bg-2);
+  border-radius: 14px 4px 14px 14px; color: var(--text-1);
+}
+
+/* Timestamp */
+.msg-time {
+  font-size: 10px; color: var(--text-4); padding: 0 4px;
+  height: 0; opacity: 0; overflow: hidden; transition: opacity 0.2s; margin-top: 0;
+}
+.msg-time.visible { height: auto; opacity: 1; margin-top: 4px; padding-bottom: 2px; }
+
+/* ═══ Thinking indicator ═══ */
+.thinking { display: flex; align-items: center; padding: 10px 4px; }
+.thinking-indicator {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  background: linear-gradient(90deg, rgba(240,243,255,0.8) 0%, rgba(242,242,242,0.8) 100%);
+  border-radius: 14px 4px 14px 14px;
+}
+.thinking-dots { display: flex; gap: 4px; }
+.thinking-dots span {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--primary);
+  animation: breathing 1.5s ease-in-out infinite;
+}
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes breathing { 0%,100%{opacity:.4;transform:scale(.85)} 50%{opacity:1;transform:scale(1)} }
+.thinking-text { font-size: 12px; color: var(--text-2); font-weight: 500; }
+.thinking-timer { font-size: 11px; color: var(--text-3); font-family: 'SF Mono', Menlo, monospace; }
+
+/* Input bar */
+.input-bar {
+  display: flex; align-items: flex-end; gap: 8px; padding: 10px 14px;
+  padding-bottom: calc(10px + 34px); background: var(--bg-base);
+  border-top: 1px solid var(--border-2); flex-shrink: 0;
+}
+.input-field {
+  flex: 1; background: var(--bg-2); border: 1px solid var(--border-1);
+  border-radius: 18px; padding: 10px 14px; font-size: 14px; color: var(--text-1);
+  min-height: 20px; max-height: 120px; line-height: 1.5; outline: none; resize: none;
+}
+.action-btn {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--bg-2);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  border: 1px solid var(--border-1); cursor: pointer; font-size: 18px;
+  color: var(--text-3); font-weight: 300; transition: transform 0.1s;
+}
+.action-btn:active { transform: scale(0.92); }
+.action-btn.primary { background: var(--primary); color: #fff; border: none; }
+.action-btn.danger { background: var(--danger-bg); border-color: rgba(245,63,63,0.2); }
+.action-btn.danger .stop-icon {
+  width: 10px; height: 10px; background: var(--danger); border-radius: 2px;
+}
+
+@keyframes expand-fade { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fade-in { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+
+/* Preview toggle */
+.preview-controls {
+  position: fixed; top: 12px; right: 12px; z-index: 100;
+  display: flex; gap: 6px;
+}
+.preview-controls button {
+  padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border-1);
+  background: #fff; font-size: 12px; cursor: pointer; color: var(--text-2);
+}
+.preview-controls button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+</style>
+</head>
+<body>
+
+<div class="preview-controls">
+  <button onclick="toggleState('thinking')" id="btn-thinking">Show Thinking</button>
+  <button onclick="toggleState('permission')" id="btn-permission">Show Permission</button>
+  <button onclick="toggleState('card')" id="btn-card">Card Mode</button>
+</div>
+
+<div class="phone-frame">
+  <div class="nav-bar"><h1>CodePocket</h1></div>
+
+  <div class="chat-messages" id="chatMessages">
+
+    <!-- Status line -->
+    <div class="status-line">
+      <div class="status-dot status-dot-warning"></div>
+      <span class="status-text">本地终端操作中</span>
+    </div>
+
+    <!-- ═══ User message ═══ -->
+    <div class="msg user">
+      <div class="msg-bubble-wrapper">
+        <div class="msg-bubble">帮我优化下 src/components/App.tsx 里的表单验证逻辑</div>
+      </div>
+      <div class="msg-time visible">14:30</div>
+    </div>
+
+    <!-- ═══ Agent message: text + thinking + tool group ═══ -->
+    <div class="msg agent">
+      <div class="msg-blocks">
+
+        <!-- Thinking block -->
+        <div class="thinking-block" id="thinkingBlock">
+          <div class="thinking-block-divider"></div>
+          <div class="thinking-block-header" onclick="toggleThinking()">
+            <div class="thinking-block-arrow" id="thinkingArrow"></div>
+            <span class="thinking-block-summary">Thought complete — Let me read the file first to understand the current validation logic...</span>
+          </div>
+          <div class="thinking-block-body" id="thinkingBody" style="display:none">
+The user wants me to optimize form validation in App.tsx. Let me first read the file to understand what validation logic currently exists, then I'll refactor it to be more robust and maintainable. I should look for common patterns like email validation, required fields, and error message handling.
+          </div>
+          <div class="thinking-block-divider"></div>
+        </div>
+
+        <!-- Text block -->
+        <div class="msg-text-block">
+          <div class="msg-content">
+            <div class="msg-text">我来帮你优化表单验证逻辑。先看看当前的代码结构。</div>
+          </div>
+          <button class="msg-copy-btn" onclick="copyText('我来帮你优化表单验证逻辑。先看看当前的代码结构。')">
+            <div class="copy-icon"></div>
+          </button>
+        </div>
+
+        <!-- Tool group: View Steps (3 tool calls) -->
+        <div class="tool-group">
+          <div class="tool-group-header" onclick="toggleGroup(this)">
+            <div class="tool-group-icon"><span>3</span></div>
+            <span class="tool-group-label">View Steps</span>
+            <div class="tool-chevron"></div>
+          </div>
+          <div class="tool-group-body" style="display:none">
+            <!-- Tool 1 -->
+            <div class="tool-group-item">
+              <div class="tool-group-item-header" onclick="toggleToolItem(this)">
+                <div class="tool-status-dot completed"></div>
+                <span class="tool-name">Read</span>
+                <span class="tool-param-summary">App.tsx</span>
+                <div class="tool-chevron"></div>
+              </div>
+              <div class="tool-group-item-body" style="display:none">
+                <div class="tool-input-display">
+                  <span class="tool-input-label">Input</span>
+                  <span class="tool-input-text">src/components/App.tsx</span>
+                </div>
+                <div class="tool-result-wrapper">
+                  <div class="tool-result tool-result-collapsed">
+                    <pre>import React, { useState } from 'react';
+
+interface FormData {
+  email: string;
+  password: string;
+  name: string;
+}
+
+function validateEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validatePassword(password: string): boolean {
+  return password.length >= 8;
+}
+
+export const App = () => {
+  const [form, setForm] = useState&lt;FormData&gt;({
+    email: '',
+    password: '',
+    name: '',
+  });
+
+  const [errors, setErrors] = useState&lt;Record&lt;string, string&gt;&gt;({});
+
+  const handleSubmit = () => {
+    const newErrors: Record&lt;string, string&gt; = {};
+    if (!form.email) newErrors.email = 'Email is required';
+    else if (!validateEmail(form.email)) newErrors.email = 'Invalid email';
+    if (!form.password) newErrors.password = 'Password is required';
+    else if (!validatePassword(form.password)) newErrors.password = 'Too short';
+    if (!form.name) newErrors.name = 'Name is required';
+
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length === 0) {
+      console.log('submit', form);
+    }
+  };
+
+  return (
+    &lt;div&gt;
+      &lt;input value={form.email} onChange={e =&gt; setForm({...form, email: e.target.value})} /&gt;
+      &lt;span&gt;{errors.email}&lt;/span&gt;
+      &lt;input value={form.password} onChange={e =&gt; setForm({...form, password: e.target.value})} /&gt;
+      &lt;span&gt;{errors.password}&lt;/span&gt;
+      &lt;input value={form.name} onChange={e =&gt; setForm({...form, name: e.target.value})} /&gt;
+      &lt;span&gt;{errors.name}&lt;/span&gt;
+      &lt;button onClick={handleSubmit}&gt;Submit&lt;/button&gt;
+    &lt;/div&gt;
+  );
+};</pre>
+                    <div class="tool-result-mask"></div>
+                  </div>
+                  <div class="tool-result-toggle" onclick="toggleResult(this)">
+                    <span>展开更多</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Tool 2 -->
+            <div class="tool-group-item">
+              <div class="tool-group-item-header" onclick="toggleToolItem(this)">
+                <div class="tool-status-dot completed"></div>
+                <span class="tool-name">Grep</span>
+                <span class="tool-param-summary">"validate" in src/</span>
+                <div class="tool-chevron"></div>
+              </div>
+              <div class="tool-group-item-body" style="display:none">
+                <div class="tool-input-display">
+                  <span class="tool-input-label">Input</span>
+                  <span class="tool-input-text">pattern: "validate" path: "src/"</span>
+                </div>
+                <div class="tool-result-wrapper">
+                  <div class="tool-result">
+                    <pre>src/components/App.tsx:5:  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+src/components/App.tsx:9:  return password.length >= 8;
+src/utils/validation.ts:1:export const validators = { ... }</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Tool 3 -->
+            <div class="tool-group-item">
+              <div class="tool-group-item-header" onclick="toggleToolItem(this)">
+                <div class="tool-status-dot running"></div>
+                <span class="tool-name">Edit</span>
+                <span class="tool-param-summary">App.tsx</span>
+                <div class="tool-chevron"></div>
+              </div>
+              <div class="tool-group-item-body" style="display:none">
+                <div class="diff-view">
+                  <div class="diff-file">src/components/App.tsx</div>
+                  <div class="diff-content">
+                    <div class="diff-line diff-line-old">- function validateEmail(email: string): boolean {</div>
+                    <div class="diff-line diff-line-old">-   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);</div>
+                    <div class="diff-line diff-line-old">- }</div>
+                    <div class="diff-line diff-line-new">+ import { validateEmail, validatePassword, validateRequired } from './validators';</div>
+                    <div class="diff-line diff-line-new">+ </div>
+                    <div class="diff-line diff-line-old">- function validatePassword(password: string): boolean {</div>
+                    <div class="diff-line diff-line-old">-   return password.length >= 8;</div>
+                    <div class="diff-line diff-line-old">- }</div>
+                    <div class="diff-line diff-line-new">+ const rules: ValidationRule[] = [</div>
+                    <div class="diff-line diff-line-new">+   { field: 'email', validators: [validateRequired, validateEmail] },</div>
+                    <div class="diff-line diff-line-new">+   { field: 'password', validators: [validateRequired, validatePassword] },</div>
+                    <div class="diff-line diff-line-new">+   { field: 'name', validators: [validateRequired] },</div>
+                    <div class="diff-line diff-line-new">+ ];</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Text response -->
+        <div class="msg-text-block">
+          <div class="msg-content">
+            <div class="msg-text">我已经完成了重构。主要改进：</div>
+          </div>
+          <button class="msg-copy-btn" onclick="copyText('我已经完成了重构。')">
+            <div class="copy-icon"></div>
+          </button>
+        </div>
+
+        <!-- Code block -->
+        <div class="code-block">
+          <div class="code-header">
+            <span class="code-lang">typescript</span>
+          </div>
+          <div class="code-text">
+            <pre>const rules: ValidationRule[] = [
+  { field: 'email', validators: [validateRequired, validateEmail] },
+  { field: 'password', validators: [validateRequired, validatePassword] },
+  { field: 'name', validators: [validateRequired] },
+];</pre>
+          </div>
+        </div>
+
+        <div class="msg-text-block">
+          <div class="msg-content">
+            <div class="msg-text">将验证逻辑提取为独立的 validator 函数，使用规则数组来配置验证，更易于维护和扩展。</div>
+          </div>
+          <button class="msg-copy-btn" onclick="copyText('将验证逻辑提取为独立的 validator 函数，使用规则数组来配置验证，更易于维护和扩展。')">
+            <div class="copy-icon"></div>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══ User message ═══ -->
+    <div class="msg user">
+      <div class="msg-bubble-wrapper">
+        <div class="msg-bubble">看起来不错，提交吧</div>
+      </div>
+      <div class="msg-time" onclick="this.classList.toggle('visible')">14:32</div>
+    </div>
+
+    <!-- ═══ Single tool call card ═══ -->
+    <div class="msg agent">
+      <div class="msg-blocks">
+        <div class="tool-card completed expanded">
+          <div class="tool-card-header">
+            <div class="tool-status-dot completed"></div>
+            <span class="tool-name">Bash</span>
+            <span class="tool-param-summary">git commit -m "refactor: extract validation"</span>
+            <div class="tool-chevron up"></div>
+          </div>
+          <div class="tool-card-body" style="">
+            <div class="tool-input-display">
+              <span class="tool-input-label">Input</span>
+              <span class="tool-input-text">git add -A && git commit -m "refactor: extract form validation into reusable validators"</span>
+            </div>
+            <div class="tool-result-wrapper">
+              <div class="tool-result">
+                <pre>[main a3f2b1c] refactor: extract form validation into reusable validators
+ 2 files changed, 45 insertions(+), 28 deletions(-)</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Agent final response ═══ -->
+    <div class="msg agent">
+      <div class="msg-blocks">
+        <div class="msg-text-block">
+          <div class="msg-content">
+            <div class="msg-text">已提交！commit <code style="background:#f2f3f5;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:12px">a3f2b1c</code>。如果需要其他优化随时告诉我。</div>
+          </div>
+          <button class="msg-copy-btn" onclick="copyText('已提交！')">
+            <div class="copy-icon"></div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Permission card (hidden by default) -->
+    <div class="msg agent" id="permissionMsg" style="display:none">
+      <div class="msg-blocks">
+        <div class="perm-card">
+          <div class="perm-title">权限请求</div>
+          <div class="perm-detail">Bash: npm run build</div>
+          <div class="perm-actions">
+            <button class="perm-btn perm-btn-allow">允许</button>
+            <button class="perm-btn perm-btn-deny">拒绝</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Thinking indicator (active) -->
+    <div class="thinking" id="thinkingIndicator" style="display:none">
+      <div class="thinking-indicator">
+        <div class="thinking-dots"><span></span><span></span><span></span></div>
+        <span class="thinking-text">思考中</span>
+        <span class="thinking-timer" id="timerText">0s</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Input bar -->
+  <div class="input-bar">
+    <div class="action-btn danger" id="abortBtn" style="display:none">
+      <div class="stop-icon"></div>
+    </div>
+    <div class="action-btn">+</div>
+    <textarea class="input-field" placeholder="输入消息..." rows="1"></textarea>
+    <div class="action-btn primary" style="font-size:14px">↑</div>
+  </div>
+</div>
+
+<script>
+function toggleGroup(header) {
+  const body = header.nextElementSibling;
+  const chevron = header.querySelector('.tool-chevron');
+  if (body.style.display === 'none') {
+    body.style.display = '';
+    chevron.classList.add('up');
+  } else {
+    body.style.display = 'none';
+    chevron.classList.remove('up');
+  }
+}
+
+function toggleToolItem(header) {
+  const body = header.nextElementSibling;
+  const chevron = header.querySelector('.tool-chevron');
+  if (body.style.display === 'none') {
+    body.style.display = '';
+    chevron.classList.add('up');
+  } else {
+    body.style.display = 'none';
+    chevron.classList.remove('up');
+  }
+}
+
+function toggleResult(btn) {
+  const wrapper = btn.previousElementSibling;
+  const result = wrapper.querySelector('.tool-result');
+  const mask = wrapper.querySelector('.tool-result-mask');
+  const isCollapsed = result.classList.contains('tool-result-collapsed');
+  if (isCollapsed) {
+    result.classList.remove('tool-result-collapsed');
+    if (mask) mask.style.display = 'none';
+    btn.querySelector('span').textContent = '收起';
+  } else {
+    result.classList.add('tool-result-collapsed');
+    if (mask) mask.style.display = '';
+    btn.querySelector('span').textContent = '展开更多';
+  }
+}
+
+function toggleThinking() {
+  const body = document.getElementById('thinkingBody');
+  const arrow = document.getElementById('thinkingArrow');
+  if (body.style.display === 'none') {
+    body.style.display = '';
+    arrow.classList.add('expanded');
+  } else {
+    body.style.display = 'none';
+    arrow.classList.remove('expanded');
+  }
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.currentTarget;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<span style="font-size:10px;color:var(--success);">✓</span>';
+    setTimeout(() => btn.innerHTML = orig, 1000);
+  });
+}
+
+function toggleState(type) {
+  if (type === 'thinking') {
+    const el = document.getElementById('thinkingIndicator');
+    const abortBtn = document.getElementById('abortBtn');
+    const btn = document.getElementById('btn-thinking');
+    const visible = el.style.display !== 'none';
+    el.style.display = visible ? 'none' : '';
+    abortBtn.style.display = visible ? 'none' : '';
+    btn.classList.toggle('active');
+    if (!visible) startTimer(); else stopTimer();
+  } else if (type === 'permission') {
+    const el = document.getElementById('permissionMsg');
+    const btn = document.getElementById('btn-permission');
+    el.style.display = el.style.display === 'none' ? '' : 'none';
+    btn.classList.toggle('active');
+  } else if (type === 'card') {
+    document.querySelector('.phone-frame').classList.toggle('card-preview');
+    document.getElementById('btn-card').classList.toggle('active');
+  }
+}
+
+let timerInterval = null;
+let timerStart = 0;
+function startTimer() {
+  timerStart = Date.now();
+  timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - timerStart) / 1000);
+    document.getElementById('timerText').textContent = s + 's';
+  }, 1000);
+}
+function stopTimer() {
+  clearInterval(timerInterval);
+  document.getElementById('timerText').textContent = '0s';
+}
+</script>
+
+</body>
+</html>

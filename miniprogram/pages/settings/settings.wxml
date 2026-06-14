@@ -1,0 +1,320 @@
+<wxs module="fmt">
+function formatDate(ts) {
+  if (!ts) return '未知'
+  var d = getDate(ts)
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate()
+}
+module.exports.formatDate = formatDate
+</wxs>
+<view class="settings-page">
+  <view class="section-label">连接</view>
+  <view class="settings-group">
+    <view class="settings-row">
+      <view class="settings-icon green">
+        <image class="si-img" src="/assets/icons/arrow-right-green.png" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">连接状态</text>
+      <text class="settings-value {{connected ? 'success' : 'muted'}}">{{connected ? '已连接' : '未连接'}}</text>
+    </view>
+    <view class="settings-row">
+      <view class="settings-icon blue">
+        <image class="si-img" src="/assets/icons/computer-blue.png" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">已连接 Hub</text>
+      <text class="settings-value muted">Claude Code</text>
+    </view>
+    <view class="settings-row" bindtap="onReconnect">
+      <view class="settings-icon purple">
+        <image class="si-img" src="/assets/icons/reconnect-purple.png" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">重新配对</text>
+      <image class="settings-chevron" src="/assets/icons/chevron-right-light.png" mode="aspectFit"/>
+    </view>
+    <view class="settings-row" bindtap="onShowGuide">
+      <view class="settings-icon" style="background:rgba(102,126,234,0.08);">
+        <image class="si-img" src="/assets/icons/info-gray.png" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">使用说明</text>
+      <image class="settings-chevron" src="/assets/icons/chevron-right-light.png" mode="aspectFit"/>
+    </view>
+    <view class="settings-row" bindtap="onShowTroubleshoot" wx:if="{{!connected}}">
+      <view class="settings-icon orange">
+        <image class="si-img" src="/assets/icons/info-gray.png" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">连接问题排查</text>
+      <image class="settings-chevron" src="/assets/icons/chevron-right-light.png" mode="aspectFit"/>
+    </view>
+  </view>
+
+  <view class="section-label" wx:if="{{isAdmin}}">管理</view>
+  <view class="settings-group" wx:if="{{isAdmin}}">
+    <view class="settings-row" bindtap="onShowKeyManager">
+      <view class="settings-icon" style="background:rgba(235,87,87,0.08);">
+        <image class="si-img" src="/assets/icons/info-gray.png" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">Key 管理</text>
+      <text class="settings-value muted">{{keyList.length || ''}} 个用户</text>
+      <image class="settings-chevron" src="/assets/icons/chevron-right-light.png" mode="aspectFit"/>
+    </view>
+  </view>
+
+  <view class="section-label">外观</view>
+  <view class="settings-group">
+    <view class="settings-row" bindtap="onToggleWallpaperPicker">
+      <view class="settings-icon warm">
+        <image class="si-img" src="/assets/icons/image-warm.svg" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">聊天壁纸</text>
+      <text class="settings-value muted">{{wallpaperName || '默认'}}</text>
+      <image class="settings-chevron" src="/assets/icons/chevron-right-light.png" mode="aspectFit"/>
+    </view>
+    <view class="settings-row" bindtap="onToggleCardMode">
+      <view class="settings-icon purple">
+        <image class="si-img" src="/assets/icons/message-square-purple.svg" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">消息风格</text>
+      <view class="style-toggle">
+        <text class="style-option {{!cardMode ? 'active' : ''}}">简洁</text>
+        <text class="style-option {{cardMode ? 'active' : ''}}">精致</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- Wallpaper picker panel -->
+  <view class="wallpaper-picker" wx:if="{{showWallpaperPicker}}">
+    <scroll-view scroll-x class="wp-scroll">
+      <view class="wp-list">
+        <view class="wp-option {{selectedWallpaper === '' ? 'active' : ''}}" bindtap="onSelectWallpaper" data-id="">
+          <view class="wp-swatch wp-default"></view>
+          <text class="wp-name">默认</text>
+        </view>
+        <view wx:for="{{presetWallpapers}}" wx:key="id"
+          class="wp-option {{selectedWallpaper === item.id ? 'active' : ''}}"
+          bindtap="onSelectWallpaper" data-id="{{item.id}}">
+          <view class="wp-swatch wp-{{item.id}}"></view>
+          <text class="wp-name">{{item.name}}</text>
+        </view>
+        <view class="wp-option" bindtap="onChooseCustomWallpaper">
+          <view class="wp-swatch wp-add">
+            <text class="wp-add-icon">+</text>
+          </view>
+          <text class="wp-name">自定义</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <view class="section-label">AI 人设</view>
+  <view class="settings-group">
+    <view class="settings-row" bindtap="onShowPersonaPicker">
+      <view class="settings-icon orange">
+        <image class="si-img" src="/assets/icons/zap-orange.svg" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">AI 人设风格</text>
+      <text class="settings-value muted">{{personaName || '默认'}}</text>
+      <image class="settings-chevron" src="/assets/icons/chevron-right-light.png" mode="aspectFit"/>
+    </view>
+  </view>
+
+  <!-- Persona picker modal -->
+  <view class="persona-mask" wx:if="{{showPersonaPicker}}" bindtap="onHidePersonaPicker">
+    <view class="persona-panel" catchtap="">
+      <view class="persona-header">
+        <text class="persona-title">选择 AI 人设</text>
+        <text class="persona-close" bindtap="onHidePersonaPicker">✕</text>
+      </view>
+      <scroll-view scroll-y class="persona-body">
+        <!-- Default option -->
+        <view class="persona-default-row {{!selectedPersonaId ? 'active' : ''}}" bindtap="onSelectPersona" data-id="">
+          <view class="persona-avatar-wrap persona-avatar-default">
+            <text class="persona-avatar-text">AI</text>
+          </view>
+          <view class="persona-info">
+            <text class="persona-name">默认 (无特殊人设)</text>
+          </view>
+          <view class="persona-check" wx:if="{{!selectedPersonaId}}">✓</view>
+        </view>
+
+        <!-- Custom personas -->
+        <view class="persona-group-label">特色人设</view>
+        <view class="persona-custom-list">
+          <view wx:for="{{customPersonas}}" wx:key="id"
+            class="persona-custom-item {{selectedPersonaId === item.id ? 'active' : ''}}"
+            bindtap="onSelectPersona" data-id="{{item.id}}">
+            <image class="persona-avatar-img" src="{{item.avatar}}" mode="aspectFit"/>
+            <text class="persona-custom-name">{{item.name}}</text>
+            <text class="persona-custom-desc">{{item.desc}}</text>
+            <view class="persona-check" wx:if="{{selectedPersonaId === item.id}}">✓</view>
+          </view>
+        </view>
+
+        <!-- MBTI 4x4 grid -->
+        <view class="persona-group-label">MBTI 16 型人格</view>
+        <view class="mbti-section-label" wx:for="{{mbtiGroups}}" wx:key="group">
+          <text class="mbti-group-name {{item.group}}">{{item.label}}</text>
+          <view class="mbti-grid">
+            <view wx:for="{{item.types}}" wx:key="id" wx:for-item="t"
+              class="mbti-cell {{selectedPersonaId === t.id ? 'active' : ''}}"
+              bindtap="onSelectPersona" data-id="{{t.id}}">
+              <image class="mbti-avatar" src="{{t.avatar}}" mode="aspectFit"/>
+              <text class="mbti-code">{{t.code}}</text>
+              <text class="mbti-name">{{t.name}}</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <view class="section-label">关于</view>
+  <view class="settings-group">
+    <view class="settings-row">
+      <view class="settings-icon gray">
+        <image class="si-img" src="/assets/icons/info-gray.png" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">版本</text>
+      <text class="settings-value muted">{{version}}</text>
+    </view>
+    <view class="settings-row contact-row">
+      <button class="contact-btn-overlay" open-type="contact"></button>
+      <view class="settings-icon teal">
+        <image class="si-img" src="/assets/icons/headset-teal.svg" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">联系客服</text>
+      <image class="settings-chevron" src="/assets/icons/chevron-right-light.png" mode="aspectFit"/>
+    </view>
+  </view>
+
+  <view class="about-footer">
+    <view class="about-logo">
+      <image src="/assets/logo.png" mode="aspectFit" style="width:200rpx;height:200rpx;"/>
+    </view>
+    <text class="about-name">CodePocket</text>
+    <text class="about-slogan">Powered by Local Claude Code.</text>
+  </view>
+
+  <!-- Troubleshoot modal -->
+  <view class="troubleshoot-mask" wx:if="{{showTroubleshoot}}" bindtap="onHideTroubleshoot">
+    <view class="troubleshoot-panel" catchtap="">
+      <view class="ts-header">
+        <text class="ts-title">连接问题排查</text>
+        <text class="ts-close" bindtap="onHideTroubleshoot">✕</text>
+      </view>
+      <scroll-view scroll-y class="ts-body">
+        <view class="ts-section">
+          <text class="ts-section-title">1. 检查 Key 是否一致</text>
+          <text class="ts-text">小程序 Key:</text>
+          <view class="ts-key-box" bindtap="onCopyKey">
+            <text class="ts-key-text">{{relayKey || '未获取'}}</text>
+            <text class="ts-copy-btn">复制</text>
+          </view>
+          <text class="ts-text">终端查看 Key:</text>
+          <view class="ts-cmd-box" bindtap="onCopyCmd1">
+            <text class="ts-cmd-text" selectable="{{true}}">cat ~/.codepocket/config.json</text>
+            <text class="ts-copy-btn">复制</text>
+          </view>
+          <text class="ts-hint">确认两边 relayKey 字段一致</text>
+        </view>
+        <view class="ts-section">
+          <text class="ts-section-title">2. 确认终端已启动</text>
+          <text class="ts-text">确保终端已执行:</text>
+          <view class="ts-cmd-box" bindtap="onCopyCmd2">
+            <text class="ts-cmd-text" selectable="{{true}}">codepocket connect</text>
+            <text class="ts-copy-btn">复制</text>
+          </view>
+          <text class="ts-hint">看到 "已连接中继" 说明终端正常</text>
+        </view>
+        <view class="ts-section">
+          <text class="ts-section-title">3. 网络检查</text>
+          <text class="ts-hint">• 手机和终端需能访问 Relay 服务</text>
+          <text class="ts-hint">• 公司网络可能屏蔽 WebSocket</text>
+          <text class="ts-hint">• 试试切换手机网络（WiFi/4G）</text>
+        </view>
+        <view class="ts-section">
+          <text class="ts-section-title">4. 重新配对</text>
+          <text class="ts-text">如果以上都正常，尝试重新配对</text>
+          <text class="ts-retry-btn" bindtap="onReconnect">去重新配对</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- Key Manager modal (admin only) -->
+  <view class="troubleshoot-mask" wx:if="{{showKeyManager}}" bindtap="onHideKeyManager">
+    <view class="troubleshoot-panel" catchtap="">
+      <view class="ts-header">
+        <text class="ts-title">Key 管理 ({{keyList.length}} 个用户)</text>
+        <text class="ts-close" bindtap="onHideKeyManager">✕</text>
+      </view>
+      <scroll-view scroll-y class="ts-body">
+        <view wx:if="{{keyListLoading}}" style="text-align:center;padding:40rpx;">
+          <text class="ts-hint">加载中...</text>
+        </view>
+        <view wx:if="{{!keyListLoading && keyList.length === 0}}" style="text-align:center;padding:40rpx;">
+          <text class="ts-hint">暂无用户</text>
+        </view>
+        <view wx:for="{{keyList}}" wx:key="id" class="km-row {{item.revoked ? 'revoked' : ''}}">
+          <view class="km-info">
+            <text class="km-name">{{item.name}}</text>
+            <text class="km-meta">
+              注册: {{fmt.formatDate(item.created)}}
+              · {{item.paired ? '已配对' : '未配对'}}
+              <text wx:if="{{item.lastPairedAt}}"> · 最近: {{fmt.formatDate(item.lastPairedAt)}}</text>
+            </text>
+          </view>
+          <text wx:if="{{item.revoked}}" class="km-badge revoked-badge">已禁用</text>
+          <text wx:elif="{{!item.revoked}}" class="km-action" bindtap="onRevokeKey" data-id="{{item.id}}" data-name="{{item.name}}">禁用</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 使用说明 -->
+  <view class="troubleshoot-mask" wx:if="{{showGuide}}" bindtap="onHideGuide">
+    <view class="troubleshoot-panel" catchtap="">
+      <view class="ts-header">
+        <text class="ts-title">使用说明</text>
+        <text class="ts-close" bindtap="onHideGuide">✕</text>
+      </view>
+      <scroll-view scroll-y class="ts-body">
+        <view class="ts-section">
+          <text class="ts-section-title">前提条件</text>
+          <text class="ts-hint">电脑终端已能正常运行 claude 命令（Claude Code CLI）</text>
+          <text class="ts-hint" style="color:#667eea;" bindtap="onGoGuide">未安装？查看安装指南 →</text>
+        </view>
+        <view class="ts-section">
+          <text class="ts-section-title">首次配对</text>
+          <text class="ts-hint">1. 在配对页面复制安装命令：</text>
+          <view class="ts-cmd-box">
+            <text class="ts-cmd-text">npm i -g @tina_summer/codepocket && codepocket --key YOUR_KEY</text>
+            <text class="ts-copy-btn" bindtap="onCopyInstallCmd">复制</text>
+          </view>
+          <text class="ts-hint">2. 在电脑终端粘贴运行，自动安装并启动</text>
+          <text class="ts-hint">3. 终端显示"已连接中继"后，小程序自动跳转</text>
+        </view>
+        <view class="ts-section">
+          <text class="ts-section-title">后续使用</text>
+          <text class="ts-hint">终端只需运行以下命令即可（等同于直接运行 claude），无需再加 --key：</text>
+          <view class="ts-cmd-box">
+            <text class="ts-cmd-text">codepocket</text>
+            <text class="ts-copy-btn" bindtap="onCopyCodepocket">复制</text>
+          </view>
+        </view>
+        <view class="ts-section">
+          <text class="ts-section-title">会话管理</text>
+          <text class="ts-hint">• 新建会话：对话列表页点击 + ，可浏览电脑目录后启动</text>
+          <text class="ts-hint">• 恢复会话：在已结束的会话上点击「恢复」，继续上次对话</text>
+          <text class="ts-hint">• 中止操作：对话中点击「中止」，中断当前操作但保持会话活跃</text>
+          <text class="ts-hint">• 结束会话：点击「归档」终止会话，释放电脑端资源</text>
+        </view>
+        <view class="ts-section">
+          <text class="ts-section-title">开源</text>
+          <text class="ts-hint" bindtap="onCopyGithub" style="color:#667eea;">github.com/TinaSummer/codepocket-cli（点击复制链接）</text>
+        </view>
+        <view class="ts-section" style="text-align:center; padding-top: 8rpx;">
+          <button class="contact-btn-sm" open-type="contact">有问题？联系客服</button>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+</view>

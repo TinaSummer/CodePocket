@@ -1,0 +1,22 @@
+{$DOMAIN} {
+    # 自动 HTTPS (Let's Encrypt) — 上线时取消注释并注释掉 tls internal
+    # tls {$EMAIL}
+
+    # 临时用自签证书测试
+    tls internal
+
+    # WebSocket 代理 — 小程序长连接
+    handle /ws {
+        reverse_proxy hapi-proxy:3010 {
+            transport http {
+                read_timeout 3600s
+                write_timeout 3600s
+            }
+        }
+    }
+
+    # 所有其他请求 (REST API + 健康检查)
+    handle {
+        reverse_proxy hapi-proxy:3010
+    }
+}

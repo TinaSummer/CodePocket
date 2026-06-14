@@ -1,0 +1,415 @@
+<view class="chat-page {{wallpaperClass || wallpaperCustomPath ? 'has-wallpaper' : ''}} {{wallpaperClass === 'night' ? 'dark-wallpaper' : ''}} {{cardMode ? 'card-mode' : ''}}">
+  <!-- Wallpaper background layer -->
+  <view class="wallpaper-layer {{wallpaperClass}}"
+    style="{{wallpaperCustomPath ? 'background-image:url(' + wallpaperCustomPath + ')' : ''}}">
+  </view>
+
+  <!-- Fixed status bar (remote + queue) -->
+  <view wx:if="{{remoteControlled || queuedCount > 0}}" class="fixed-status-bar">
+    <view wx:if="{{remoteControlled}}" class="status-line remote-line">
+      <view class="status-dot status-dot-warning"></view>
+      <text class="status-text">本地终端操作中</text>
+    </view>
+    <view wx:if="{{queuedCount > 0}}" class="status-line queue-line">
+      <view class="status-dot status-dot-muted"></view>
+      <text class="status-text">{{queuedCount}} 条消息排队中</text>
+    </view>
+  </view>
+
+  <scroll-view
+    class="chat-messages {{remoteControlled || queuedCount > 0 ? 'has-status-bar' : ''}}"
+    scroll-y
+    scroll-into-view="{{scrollToId}}"
+    scroll-with-animation
+    enhanced
+    show-scrollbar="{{false}}"
+    bindscroll="onScroll"
+    bindscrolltoupper="loadMoreMessages"
+    upper-threshold="200"
+  >
+    <view wx:if="{{loadingMore}}" class="load-more-tip">
+      <text>加载更多...</text>
+    </view>
+
+
+    <view wx:for="{{messages}}" wx:key="id" id="msg-{{index}}" class="msg {{item.role}} {{selecting ? 'msg-selecting' : ''}} {{item._selected ? 'msg-selected' : ''}}"
+      bindlongpress="onLongPressMessage" data-id="{{item.id}}"
+      bindtap="onTapMessage" data-id="{{item.id}}">
+
+      <!-- Selection checkbox -->
+      <view wx:if="{{selecting}}" class="msg-checkbox {{item._selected ? 'checked' : ''}}" catchtap="onTapMessage" data-id="{{item.id}}">
+        <view wx:if="{{item._selected}}" class="msg-checkbox-dot"></view>
+      </view>
+
+      <!-- ═══════════════════════════════════
+           AGENT message
+           ═══════════════════════════════════ -->
+      <view wx:if="{{item.role === 'agent'}}" class="msg-blocks">
+        <view wx:for="{{item.blocks}}" wx:for-item="block" wx:for-index="blockIdx" wx:key="blockIdx">
+
+          <!-- ── Text block: markdown rendering ── -->
+          <view wx:if="{{block.type === 'text'}}" class="msg-text-block">
+            <view wx:if="{{block.segments.length > 0}}" class="msg-content">
+              <view wx:for="{{block.segments}}" wx:for-item="seg" wx:key="index">
+                <view wx:if="{{seg.type === 'code'}}" class="code-block">
+                  <view wx:if="{{seg.lang}}" class="code-header">
+                    <text class="code-lang">{{seg.lang}}</text>
+                  </view>
+                  <view class="code-text">
+                    <text user-select="{{true}}">{{seg.text}}</text>
+                  </view>
+                </view>
+                <rich-text wx:elif="{{seg.type === 'heading'}}" class="msg-heading" nodes="{{seg.text}}" user-select="{{true}}"></rich-text>
+                <rich-text wx:elif="{{seg.type === 'table'}}" class="msg-table" nodes="{{seg.html}}" user-select="{{true}}"></rich-text>
+                <view wx:elif="{{seg.type === 'list-item'}}" class="msg-list-item">
+                  <text class="list-dot">•</text>
+                  <rich-text class="list-text" nodes="{{seg.text}}" user-select="{{true}}"></rich-text>
+                </view>
+                <rich-text wx:else class="msg-text" nodes="{{seg.text}}" user-select="{{true}}"></rich-text>
+              </view>
+            </view>
+            <view wx:else class="msg-content">
+              <text class="msg-text" user-select="{{true}}">{{block.text}}</text>
+            </view>
+            <!-- Copy button for agent text -->
+            <view class="msg-copy-btn" catchtap="onCopyMessage" data-msg-idx="{{index}}" data-block-idx="{{blockIdx}}">
+              <view class="copy-icon"></view>
+            </view>
+          </view>
+
+          <!-- ── Thinking block: collapsible thought process ── -->
+          <view wx:elif="{{block.type === 'thinking'}}" class="thinking-block">
+            <view class="thinking-block-divider"></view>
+            <view class="thinking-block-header" bindtap="onToggleThinking" data-msg-idx="{{index}}" data-block-idx="{{blockIdx}}">
+              <view class="thinking-block-arrow {{block.collapsed ? '' : 'expanded'}}"></view>
+              <text class="thinking-block-summary">Thought complete — {{block.summary}}</text>
+            </view>
+            <view wx:if="{{!block.collapsed}}" class="thinking-block-body">
+              <text user-select="{{true}}">{{block.text}}</text>
+            </view>
+            <view class="thinking-block-divider"></view>
+          </view>
+
+          <!-- ── Tool group: aggregated "View Steps" ── -->
+          <view wx:elif="{{block.type === 'tool-group'}}" class="tool-group">
+            <view class="tool-group-header" bindtap="onToggleToolGroup" data-msg-idx="{{index}}" data-block-idx="{{blockIdx}}">
+              <view class="tool-group-icon">
+                <text>{{block.tools.length}}</text>
+              </view>
+              <text class="tool-group-label">View Steps</text>
+              <text class="tool-chevron {{block.expanded ? 'up' : 'down'}}"></text>
+            </view>
+            <view wx:if="{{block.expanded}}" class="tool-group-body">
+              <view wx:for="{{block.tools}}" wx:for-item="tool" wx:for-index="toolIdx" wx:key="toolId" class="tool-group-item">
+                <view class="tool-group-item-header" bindtap="onToggleToolInGroup" data-msg-idx="{{index}}" data-block-idx="{{blockIdx}}" data-tool-idx="{{toolIdx}}">
+                  <view class="tool-status-dot {{tool.state}}"></view>
+                  <text class="tool-name">{{tool.name}}</text>
+                  <text wx:if="{{tool.paramSummary}}" class="tool-param-summary {{tool.expanded ? 'expanded' : ''}}">{{tool.paramSummary}}</text>
+                  <text class="tool-chevron {{tool.expanded ? 'up' : 'down'}}"></text>
+                </view>
+                <view wx:if="{{tool.expanded}}" class="tool-group-item-body">
+                  <!-- Diff view (line-by-line) -->
+                  <view wx:if="{{tool.diff}}" class="diff-view">
+                    <view wx:if="{{tool.diff.filePath}}" class="diff-file">{{tool.diff.filePath}}</view>
+                    <view class="diff-content">
+                      <view wx:for="{{tool.diff.lines}}" wx:for-item="line" wx:key="index" class="diff-line diff-line-{{line.type}}">
+                        <text>{{line.type === 'old' ? '-' : '+'}} {{line.text}}</text>
+                      </view>
+                    </view>
+                  </view>
+                  <!-- Result with collapsible -->
+                  <view wx:if="{{tool.resultDisplay}}" class="tool-result-wrapper">
+                    <view class="tool-result {{tool.isError ? 'error' : ''}} {{tool.resultDisplay.length > 300 && !tool.resultExpanded ? 'tool-result-collapsed' : ''}}">
+                      <text user-select="{{true}}">{{tool.resultDisplay}}</text>
+                      <view wx:if="{{tool.resultDisplay.length > 300 && !tool.resultExpanded}}" class="tool-result-mask"></view>
+                    </view>
+                    <view wx:if="{{tool.resultDisplay.length > 300}}" class="tool-result-toggle" catchtap="onToggleResultCollapse" data-msg-idx="{{index}}" data-block-idx="{{blockIdx}}" data-tool-idx="{{toolIdx}}">
+                      <text>{{tool.resultExpanded ? '收起' : '展开更多'}}</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <!-- ── Single tool-call card (enhanced) ── -->
+          <view wx:elif="{{block.type === 'tool-call'}}" class="tool-card {{block.expanded ? 'expanded' : ''}} {{block.state}}">
+            <view class="tool-card-header" bindtap="onToggleTool" data-msg-idx="{{index}}" data-block-idx="{{blockIdx}}">
+              <view class="tool-status-dot {{block.state}}"></view>
+              <text class="tool-name">{{block.name}}</text>
+              <text wx:if="{{block.paramSummary}}" class="tool-param-summary {{block.expanded ? 'expanded' : ''}}">{{block.paramSummary}}</text>
+              <view wx:if="{{block.hasPreviewableFile}}" class="tool-preview-btn" catchtap="onPreviewFile" data-msg-idx="{{index}}" data-block-idx="{{blockIdx}}" data-file-path="{{block.previewFilePath}}">
+                <text>预览</text>
+              </view>
+              <text class="tool-chevron {{block.expanded ? 'up' : 'down'}}"></text>
+            </view>
+
+            <!-- Expanded content -->
+            <view wx:if="{{block.expanded}}" class="tool-card-body">
+              <!-- Input display -->
+              <view wx:if="{{block.inputDisplay}}" class="tool-input-display">
+                <text class="tool-input-label">Input</text>
+                <text class="tool-input-text" user-select="{{true}}">{{block.inputDisplay}}</text>
+              </view>
+              <!-- Diff view (line-by-line) -->
+              <view wx:if="{{block.diff}}" class="diff-view">
+                <view wx:if="{{block.diff.filePath}}" class="diff-file">{{block.diff.filePath}}</view>
+                <view class="diff-content">
+                  <view wx:for="{{block.diff.lines}}" wx:for-item="line" wx:key="index" class="diff-line diff-line-{{line.type}}">
+                    <text>{{line.type === 'old' ? '-' : '+'}} {{line.text}}</text>
+                  </view>
+                </view>
+              </view>
+              <!-- Result with collapsible -->
+              <view wx:if="{{block.resultDisplay}}" class="tool-result-wrapper">
+                <view class="tool-result {{block.isError ? 'error' : ''}} {{block.resultDisplay.length > 300 && !block.resultExpanded ? 'tool-result-collapsed' : ''}}">
+                  <text user-select="{{true}}">{{block.resultDisplay}}</text>
+                  <view wx:if="{{block.resultDisplay.length > 300 && !block.resultExpanded}}" class="tool-result-mask"></view>
+                </view>
+                <view wx:if="{{block.resultDisplay.length > 300}}" class="tool-result-toggle" catchtap="onToggleResultCollapse" data-msg-idx="{{index}}" data-block-idx="{{blockIdx}}" data-tool-idx="single">
+                  <text>{{block.resultExpanded ? '收起' : '展开更多'}}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <!-- ── Permission / AskUserQuestion block ── -->
+          <view wx:elif="{{block.type === 'permission' && !block.hidden}}" class="perm-card">
+            <view class="perm-title">权限请求</view>
+            <view wx:if="{{block.input && block.questions.length === 0}}" class="perm-detail">
+              <text>{{block.input}}</text>
+            </view>
+
+            <!-- Questions with options -->
+            <view wx:if="{{block.questions.length > 0}}" class="perm-questions">
+              <view wx:for="{{block.questions}}" wx:for-item="question" wx:for-index="qIdx" wx:key="qIdx" class="perm-question">
+                <view wx:if="{{question.header}}" class="perm-question-header">{{question.header}}</view>
+                <view class="perm-question-text">{{question.question}}</view>
+                <view class="perm-options">
+                  <view
+                    wx:for="{{question.options}}" wx:for-item="option" wx:for-index="optIdx" wx:key="optIdx"
+                    class="perm-option {{block.selectedAnswers[qIdx] === option.label ? 'selected' : ''}}"
+                    bindtap="onSelectOption"
+                    data-msg-idx="{{index}}"
+                    data-block-idx="{{blockIdx}}"
+                    data-question-idx="{{qIdx}}"
+                    data-option-label="{{option.label}}"
+                  >
+                    <view class="perm-radio {{block.selectedAnswers[qIdx] === option.label ? 'checked' : ''}}">
+                      <view wx:if="{{block.selectedAnswers[qIdx] === option.label}}" class="perm-radio-dot"></view>
+                    </view>
+                    <view class="perm-option-content">
+                      <text class="perm-option-label">{{option.label}}</text>
+                      <text wx:if="{{option.description}}" class="perm-option-desc">{{option.description}}</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+              <!-- Submit button for answers -->
+              <view class="perm-actions">
+                <view class="perm-btn perm-btn-allow" bindtap="onSubmitAnswers" data-msg-idx="{{index}}" data-block-idx="{{blockIdx}}" data-request-id="{{block.requestId}}">
+                  <text>提交</text>
+                </view>
+              </view>
+            </view>
+
+            <!-- Simple approve/deny (no questions) -->
+            <view wx:else class="perm-actions">
+              <view class="perm-btn perm-btn-allow" bindtap="onApprove" data-request-id="{{block.requestId}}" data-msg-idx="{{index}}" data-block-idx="{{blockIdx}}">
+                <text>允许</text>
+              </view>
+              <view class="perm-btn perm-btn-deny" bindtap="onDeny" data-request-id="{{block.requestId}}" data-msg-idx="{{index}}" data-block-idx="{{blockIdx}}">
+                <text>拒绝</text>
+              </view>
+            </view>
+          </view>
+
+        </view>
+      </view>
+
+      <!-- ═══════════════════════════════════
+           USER message
+           ═══════════════════════════════════ -->
+      <view wx:else class="msg-bubble-wrapper">
+        <!-- Image attachments -->
+        <view wx:if="{{item.attachments.length > 0}}" class="msg-attachments">
+          <image
+            wx:for="{{item.attachments}}" wx:for-item="att" wx:key="index"
+            src="{{att.previewUrl || att.path}}"
+            mode="widthFit"
+            class="msg-image"
+            bindtap="onPreviewImage"
+            data-url="{{att.previewUrl || att.path}}"
+          />
+        </view>
+        <view class="msg-bubble">
+          <text user-select="{{true}}">{{item.text}}</text>
+        </view>
+      </view>
+
+      <!-- Timestamp: tap to toggle visibility -->
+      <view
+        wx:if="{{item.timeStr}}"
+        class="msg-time {{visibleTimeIdx === index ? 'visible' : ''}}"
+        bindtap="onToggleMsgTime"
+        data-msg-idx="{{index}}"
+      >{{item.timeStr}}</view>
+    </view>
+
+    <!-- ── Enhanced thinking indicator ── -->
+    <view wx:if="{{thinking}}" class="thinking">
+      <view class="thinking-indicator">
+        <view class="thinking-dots">
+          <view /><view /><view />
+        </view>
+        <text class="thinking-text">思考中</text>
+        <text class="thinking-timer">{{thinkingSeconds}}s</text>
+      </view>
+    </view>
+
+    <!-- ── Compact progress indicator ── -->
+    <view wx:if="{{compacting}}" class="compact-bar">
+      <view class="compact-progress" style="width: {{compactProgress || 0}}%;"></view>
+      <text class="compact-text">压缩中{{compactProgress ? ' ' + compactProgress + '%' : '...'}}</text>
+    </view>
+
+    <view style="height: 120rpx;"></view>
+  </scroll-view>
+
+  <!-- ═══════════════════════════════════
+       Input bar — textarea + inline button, expandable actions
+       ═══════════════════════════════════ -->
+  <!-- Input bar (shifts up when action panel open) -->
+  <view wx:if="{{!selecting}}" class="input-area" style="transform: translateY({{showActionMenu ? '-160rpx' : '0'}})">
+    <view class="input-bar">
+      <!-- YOLO toggle -->
+      <view class="yolo-btn {{yoloMode ? 'active' : ''}}" bindtap="onToggleYolo">
+        <text class="yolo-label">Y</text>
+      </view>
+      <textarea
+        class="input-field"
+        placeholder="输入消息..."
+        placeholder-style="color:#999"
+        value="{{inputText}}"
+        bindinput="onInput"
+        bindconfirm="onSend"
+        confirm-type="send"
+        auto-height
+        maxlength="-1"
+        cursor-spacing="20"
+      />
+      <!-- Abort / Send / Expand button -->
+      <view wx:if="{{thinking || sending}}" class="bar-btn abort-btn {{aborting ? 'loading' : ''}}" bindtap="onAbort">
+        <view class="abort-icon"></view>
+      </view>
+      <view wx:elif="{{inputText.length > 0}}" class="bar-btn send-btn {{sending ? 'disabled' : ''}}" bindtap="onSend">
+        <view class="send-arrow"></view>
+      </view>
+      <view wx:else class="bar-btn expand-btn {{showActionMenu ? 'active' : ''}}" bindtap="onToggleActionMenu">
+        <text>+</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- Action panel (fixed at bottom, separate from input bar) -->
+  <view wx:if="{{showActionMenu && !selecting}}" class="action-panel-fixed">
+    <view class="action-row">
+      <view class="action-item" bindtap="onChooseImage">
+        <view class="action-icon-circle action-icon-image">
+          <view class="aicon-img"></view>
+        </view>
+        <text class="action-text">图片</text>
+      </view>
+      <view class="action-item" bindtap="onShowShortcuts">
+        <view class="action-icon-circle action-icon-shortcut">
+          <view class="aicon-zap"></view>
+        </view>
+        <text class="action-text">指令</text>
+      </view>
+      <view class="action-item" bindtap="onExportChat">
+        <view class="action-icon-circle action-icon-export">
+          <view class="aicon-share"></view>
+        </view>
+        <text class="action-text">分享</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- Quick commands popup (above input bar) -->
+  <view class="sc-popup" wx:if="{{showShortcutPopup}}" bindtap="onCloseShortcuts">
+    <view class="sc-popup-inner" catchtap="onNoop">
+      <!-- Edit form -->
+      <block wx:if="{{editingShortcut}}">
+        <view class="sc-form">
+          <input class="sc-input" placeholder="名称（选填）" value="{{editingShortcut.name}}"
+            bindinput="onShortcutInput" data-field="name" adjust-position="{{false}}" />
+          <textarea class="sc-textarea" placeholder="输入指令内容..." value="{{editingShortcut.text}}"
+            bindinput="onShortcutInput" data-field="text" auto-height maxlength="-1" adjust-position="{{false}}" fixed="{{true}}" />
+          <view class="sc-form-actions">
+            <view class="sc-btn-cancel" bindtap="onCancelEditShortcut">取消</view>
+            <view class="sc-btn-save" bindtap="onSaveShortcut">保存</view>
+          </view>
+        </view>
+      </block>
+      <!-- List -->
+      <block wx:else>
+        <view wx:if="{{shortcutList.length === 0}}" class="sc-popup-empty">
+          <text class="sc-popup-empty-text">还没有指令，添加一个吧</text>
+        </view>
+        <view wx:for="{{shortcutList}}" wx:key="index" class="sc-popup-item">
+          <view class="sc-item-info" bindtap="onUseShortcut" data-index="{{index}}">
+            <text class="sc-popup-name">{{item.name}}</text>
+          </view>
+          <view class="sc-item-actions">
+            <view class="sc-item-btn" catchtap="onEditShortcut" data-index="{{index}}">
+              <text class="sc-item-btn-text">编辑</text>
+            </view>
+            <view class="sc-item-btn sc-item-btn-danger" catchtap="onDeleteShortcut" data-index="{{index}}">
+              <text class="sc-item-btn-text">删除</text>
+            </view>
+          </view>
+        </view>
+        <view class="sc-add" bindtap="onAddShortcut">
+          <text class="sc-add-text">+ 添加快捷指令</text>
+        </view>
+      </block>
+    </view>
+  </view>
+
+  <!-- Selected image preview (above input bar) -->
+  <view wx:if="{{selectedImage}}" class="image-preview-bar">
+    <image src="{{selectedImage.path}}" mode="aspectFit" class="preview-thumb" />
+    <view class="preview-remove" bindtap="onRemoveImage">×</view>
+  </view>
+
+  <!-- Phone action confirmation modal -->
+  <phone-action-modal
+    visible="{{phoneModal.visible}}"
+    actionId="{{phoneModal.actionId}}"
+    tool="{{phoneModal.tool}}"
+    params="{{phoneModal.params}}"
+    bind:confirm="onPhoneActionConfirm"
+    bind:cancel="onPhoneActionCancel"
+  />
+
+  <!-- Selection mode bottom bar -->
+  <view wx:if="{{selecting}}" class="select-bar">
+    <view class="select-bar-info">
+      <text>已选 {{selectedIds.length}} 条</text>
+    </view>
+    <view class="select-bar-actions">
+      <view class="select-btn select-btn-all" bindtap="onSelectAll">
+        <text>全选</text>
+      </view>
+      <view class="select-btn select-btn-share" bindtap="onShareSelected">
+        <text>分享</text>
+      </view>
+      <view class="select-btn select-btn-cancel" bindtap="onCancelSelect">
+        <text>取消</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- Hidden canvas for export -->
+  <canvas type="2d" id="exportCanvas" style="position:fixed;left:-9999px;width:750px;height:2000px;"></canvas>
+</view>

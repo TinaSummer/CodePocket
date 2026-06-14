@@ -1,0 +1,16 @@
+node_modules/
+.env
+*.log
+.DS_Store
+.claude/
+miniprogram/node_modules/
+relay/node_modules/
+connector/node_modules/
+proxy/node_modules/
+.superpowers/
+connector/vendor/
+project.private.config.json
+miniprogram/project.private.config.json
+connector/bun.lock
+miniprogram/utils/config.local.js
+*.key

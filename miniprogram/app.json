@@ -1,0 +1,42 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/settings/settings",
+    "pages/chat/chat",
+    "pages/setup/setup",
+    "pages/map/map",
+    "pages/share-preview/share-preview",
+    "pages/guide/guide"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTitleText": "CodePocket",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f9fafb",
+    "backgroundColorTop": "#ffffff",
+    "backgroundColorBottom": "#f9fafb"
+  },
+  "tabBar": {
+    "color": "#c9cdd4",
+    "selectedColor": "#667eea",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "对话",
+        "iconPath": "assets/tab-chat.png",
+        "selectedIconPath": "assets/tab-chat-active.png"
+      },
+      {
+        "pagePath": "pages/settings/settings",
+        "text": "设置",
+        "iconPath": "assets/tab-settings.png",
+        "selectedIconPath": "assets/tab-settings-active.png"
+      }
+    ]
+  },
+  "__usePrivacyCheck__": true,
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

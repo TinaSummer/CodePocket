@@ -1,0 +1,87 @@
+.modal-mask {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-dialog {
+  width: 600rpx;
+  background: #fff;
+  border-radius: 24rpx;
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 36rpx 32rpx 16rpx;
+}
+
+.modal-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.modal-body {
+  padding: 16rpx 32rpx 24rpx;
+}
+
+.modal-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 12rpx 0;
+}
+
+.modal-label {
+  font-size: 28rpx;
+  color: #999;
+  min-width: 120rpx;
+  flex-shrink: 0;
+}
+
+.modal-value {
+  font-size: 28rpx;
+  color: #333;
+  flex: 1;
+  word-break: break-all;
+}
+
+.clip-text {
+  max-height: 200rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-actions {
+  display: flex;
+  border-top: 1rpx solid #eee;
+}
+
+.modal-btn {
+  flex: 1;
+  text-align: center;
+  padding: 28rpx 0;
+  font-size: 32rpx;
+}
+
+.modal-btn-cancel {
+  color: #666;
+  border-right: 1rpx solid #eee;
+}
+
+.modal-btn-confirm {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.modal-hint {
+  padding: 12rpx 0 0;
+}
+
+.hint-text {
+  font-size: 24rpx;
+  color: #f90;
+}

@@ -1,0 +1,134 @@
+<view class="preview-page">
+  <!-- Loading -->
+  <view wx:if="{{loading}}" class="loading-state">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">加载对话中...</text>
+  </view>
+
+  <!-- Preview content -->
+  <scroll-view wx:else class="preview-scroll" scroll-y enhanced show-scrollbar="{{false}}">
+    <view wx:for="{{sessions}}" wx:for-index="sIdx" wx:key="id" class="preview-session">
+      <!-- Session header -->
+      <view class="session-divider">
+        <text class="session-divider-name">{{item.name}}</text>
+        <text class="session-divider-meta">{{item.agent}} · {{item.path}}</text>
+      </view>
+
+      <!-- Messages -->
+      <view wx:for="{{item.messages}}" wx:for-item="msg" wx:for-index="mIdx" wx:key="id" class="msg {{msg.role}}">
+
+        <!-- Agent message -->
+        <view wx:if="{{msg.role === 'agent'}}" class="msg-blocks">
+          <view wx:for="{{msg.blocks}}" wx:for-item="block" wx:for-index="blockIdx" wx:key="blockIdx">
+
+            <!-- Text block -->
+            <view wx:if="{{block.type === 'text'}}" class="msg-text-block">
+              <view wx:if="{{block.segments.length > 0}}" class="msg-content">
+                <view wx:for="{{block.segments}}" wx:for-item="seg" wx:key="index">
+                  <view wx:if="{{seg.type === 'code'}}" class="code-block">
+                    <view wx:if="{{seg.lang}}" class="code-header">
+                      <text class="code-lang">{{seg.lang}}</text>
+                    </view>
+                    <view class="code-text">
+                      <text user-select="{{true}}">{{seg.text}}</text>
+                    </view>
+                  </view>
+                  <rich-text wx:elif="{{seg.type === 'heading'}}" class="msg-heading" nodes="{{seg.text}}" user-select="{{true}}"></rich-text>
+                  <rich-text wx:elif="{{seg.type === 'table'}}" class="msg-table" nodes="{{seg.html}}" user-select="{{true}}"></rich-text>
+                  <view wx:elif="{{seg.type === 'list-item'}}" class="msg-list-item">
+                    <text class="list-dot">•</text>
+                    <rich-text class="list-text" nodes="{{seg.text}}" user-select="{{true}}"></rich-text>
+                  </view>
+                  <rich-text wx:else class="msg-text" nodes="{{seg.text}}" user-select="{{true}}"></rich-text>
+                </view>
+              </view>
+              <view wx:else class="msg-content">
+                <text class="msg-text" user-select="{{true}}">{{block.text}}</text>
+              </view>
+            </view>
+
+            <!-- Thinking block (expandable) -->
+            <view wx:elif="{{block.type === 'thinking'}}" class="thinking-block">
+              <view class="thinking-block-divider"></view>
+              <view class="thinking-block-header" bindtap="onToggleThinking" data-session-idx="{{sIdx}}" data-msg-idx="{{mIdx}}" data-block-idx="{{blockIdx}}">
+                <view class="thinking-block-arrow {{block.expanded ? 'expanded' : ''}}"></view>
+                <text class="thinking-block-summary">Thought complete — {{block.summary}}</text>
+              </view>
+              <view wx:if="{{block.expanded}}" class="thinking-block-body">
+                <text user-select="{{true}}">{{block.text}}</text>
+              </view>
+              <view class="thinking-block-divider"></view>
+            </view>
+
+            <!-- Tool group (expandable) -->
+            <view wx:elif="{{block.type === 'tool-group'}}" class="tool-group">
+              <view class="tool-group-header" bindtap="onToggleGroup" data-session-idx="{{sIdx}}" data-msg-idx="{{mIdx}}" data-block-idx="{{blockIdx}}">
+                <view class="tool-group-icon">
+                  <text>{{block.tools.length}}</text>
+                </view>
+                <text class="tool-group-label">View Steps</text>
+                <text class="tool-chevron {{block.expanded ? 'up' : ''}}"></text>
+              </view>
+              <view wx:if="{{block.expanded}}" class="tool-group-body">
+                <view wx:for="{{block.tools}}" wx:for-item="tool" wx:key="toolId">
+                  <view class="tool-group-item-header">
+                    <view class="tool-status-dot {{tool.state}}"></view>
+                    <text class="tool-name">{{tool.name}}</text>
+                    <text wx:if="{{tool.paramSummary}}" class="tool-param-summary">{{tool.paramSummary}}</text>
+                  </view>
+                  <view wx:if="{{tool.resultDisplay}}" class="tool-result {{tool.isError ? 'error' : ''}}">
+                    <text>{{tool.resultDisplay.length > 200 ? tool.resultDisplay.slice(0, 200) + '...' : tool.resultDisplay}}</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+
+            <!-- Single tool call (collapsed) -->
+            <view wx:elif="{{block.type === 'tool-call'}}" class="tool-card {{block.state}}">
+              <view class="tool-card-header">
+                <view class="tool-status-dot {{block.state}}"></view>
+                <text class="tool-name">{{block.name}}</text>
+                <text wx:if="{{block.paramSummary}}" class="tool-param-summary">{{block.paramSummary}}</text>
+              </view>
+            </view>
+
+            <!-- Permission (resolved badge) -->
+            <view wx:elif="{{block.type === 'permission'}}" class="perm-badge">
+              <text class="perm-badge-text">权限已处理</text>
+            </view>
+
+          </view>
+        </view>
+
+        <!-- User message -->
+        <view wx:else class="msg-bubble-wrapper">
+          <view class="msg-bubble">
+            <text user-select="{{true}}">{{msg.text}}</text>
+          </view>
+        </view>
+
+      </view>
+    </view>
+
+    <!-- Footer -->
+    <view class="preview-footer">
+      <text class="footer-brand">CodePocket</text>
+      <text class="footer-sub">Shared from CodePocket</text>
+    </view>
+
+    <view style="height: 200rpx;"></view>
+  </scroll-view>
+
+  <!-- Bottom action bar -->
+  <view class="preview-actions">
+    <button class="action-btn action-share" open-type="share">
+      分享给朋友
+    </button>
+    <view class="action-btn action-save" bindtap="onSaveImage">
+      <text>保存到相册</text>
+    </view>
+  </view>
+
+  <!-- Hidden export canvas -->
+  <canvas type="2d" id="shareCanvas" style="position:fixed;left:-9999px;width:750px;height:2000px;"></canvas>
+</view>

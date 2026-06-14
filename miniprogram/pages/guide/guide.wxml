@@ -1,0 +1,87 @@
+<scroll-view scroll-y class="guide-page">
+  <!-- Step 1: Claude Code -->
+  <view class="guide-section">
+    <view class="section-header">
+      <view class="section-num">1</view>
+      <text class="section-title">安装 Claude Code</text>
+    </view>
+    <text class="guide-hint">打开终端运行以下命令：</text>
+
+    <view class="cmd-group">
+      <text class="cmd-label">稳定版（推荐）</text>
+      <view class="cmd-box" bindtap="onCopyClaude">
+        <text class="cmd-text">curl -fsSL https://claude.ai/install.sh | bash</text>
+        <text class="cmd-copy">复制</text>
+      </view>
+    </view>
+
+    <view class="cmd-group">
+      <text class="cmd-label">最新开发版</text>
+      <view class="cmd-box" bindtap="onCopyClaudeLatest">
+        <text class="cmd-text">curl -fsSL https://claude.ai/install.sh | bash -s latest</text>
+        <text class="cmd-copy">复制</text>
+      </view>
+    </view>
+
+    <text class="guide-hint">安装完成后终端运行 claude 验证是否成功。</text>
+  </view>
+
+  <!-- Step 2: CC-Switch -->
+  <view class="guide-section">
+    <view class="section-header">
+      <view class="section-num">2</view>
+      <text class="section-title">安装 CC-Switch（可选）</text>
+    </view>
+    <text class="guide-hint">CC-Switch 是管理 Claude Code 多 API 密钥/中转服务商切换工具。</text>
+    <text class="guide-hint" style="color:#667eea;" bindtap="onCopyCcSwitch">官方仓库：github.com/farion1231/cc-switch（点击复制链接）</text>
+    <text class="guide-hint" style="color:#667eea;" bindtap="onCopyCcSwitchDl">下载地址：github.com/farion1231/cc-switch/releases/latest（点击复制链接）</text>
+
+    <view class="download-table">
+      <view class="table-header">
+        <text class="th-name">系统</text>
+        <text class="th-file">下载文件</text>
+        <text class="th-desc">说明</text>
+      </view>
+      <view class="table-row">
+        <text class="td-name">Windows</text>
+        <text class="td-file">.msi</text>
+        <text class="td-desc">标准安装版</text>
+      </view>
+      <view class="table-row">
+        <text class="td-name">Windows</text>
+        <text class="td-file">-Portable.zip</text>
+        <text class="td-desc">绿色便携版</text>
+      </view>
+      <view class="table-row">
+        <text class="td-name">macOS</text>
+        <text class="td-file">.dmg</text>
+        <text class="td-desc">Intel/M 芯片通用</text>
+      </view>
+      <view class="table-row">
+        <text class="td-name">Ubuntu/Debian</text>
+        <text class="td-file">.deb</text>
+        <text class="td-desc">deb 安装包</text>
+      </view>
+      <view class="table-row">
+        <text class="td-name">Linux 通用</text>
+        <text class="td-file">.AppImage</text>
+        <text class="td-desc">直接运行</text>
+      </view>
+    </view>
+    <text class="guide-hint">下载地址：github.com/farion1231/cc-switch/releases/latest</text>
+  </view>
+
+  <!-- Step 3: CodePocket -->
+  <view class="guide-section">
+    <view class="section-header">
+      <view class="section-num">3</view>
+      <text class="section-title">安装 CodePocket Connector</text>
+    </view>
+    <text class="guide-hint">回到配对页或设置页的「使用说明」，复制一键安装命令即可。</text>
+  </view>
+
+  <view class="guide-footer">
+    <text class="footer-text">安装完成后，返回配对页面继续配对。</text>
+    <button class="contact-btn" open-type="contact">有问题？联系客服</button>
+  </view>
+</scroll-view>

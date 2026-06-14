@@ -1,0 +1,138 @@
+<view class="setup-page">
+  <view class="setup-card">
+    <view class="setup-brand">
+      <image class="setup-logo" src="/assets/logo.png" mode="aspectFit" />
+      <text class="setup-title">CodePocket</text>
+      <text class="setup-subtitle">你的全能 AI 随身控制台</text>
+    </view>
+
+    <!-- 使用说明 -->
+    <view class="guide-toggle" bindtap="onToggleGuide">
+      <text class="guide-toggle-text">使用说明</text>
+      <text class="guide-toggle-arrow">^</text>
+    </view>
+    <view wx:if="{{showGuide}}" class="guide-content">
+      <view class="guide-section">
+        <text class="guide-label">前提条件</text>
+        <text class="guide-text">电脑终端已能正常运行 claude 命令（Claude Code CLI）</text>
+        <text class="guide-text" style="color:#667eea;" bindtap="onGoGuide">未安装？查看安装指南 →</text>
+      </view>
+      <view class="guide-section">
+        <text class="guide-label">首次配对</text>
+        <text class="guide-step">1. 点击下方命令框复制，在电脑终端粘贴运行</text>
+        <text class="guide-step">2. 命令会自动安装 Connector 并用你的 Key 启动</text>
+        <text class="guide-step">3. 终端显示"已连接中继"后，小程序自动跳转</text>
+      </view>
+      <view class="guide-section">
+        <text class="guide-label">后续使用</text>
+        <text class="guide-text">终端只需运行以下命令即可（等同于直接运行 claude），无需再加 --key：</text>
+        <view class="command-box" bindtap="onCopyRun" style="margin-top: 8rpx;">
+          <text class="command-text">codepocket</text>
+          <text class="command-copy">复制</text>
+        </view>
+      </view>
+      <view class="guide-section">
+        <text class="guide-label">开源</text>
+        <text class="guide-text" bindtap="onCopyGithub">Connector 开源代码：github.com/TinaSummer/codepocket-cli（点击复制链接）</text>
+      </view>
+    </view>
+
+    <view wx:if="{{step === 'show_command' || step === 'connecting'}}" class="setup-steps">
+      <view class="setup-step">
+        <view class="step-num active">1</view>
+        <view class="step-content">
+          <text class="step-title">在终端运行以下命令</text>
+          <view class="command-box" bindtap="onCopyCommand">
+            <text class="command-text" selectable="{{true}}" style="color:#e5e6eb;">{{command}}</text>
+            <text class="command-copy" style="color:#667eea;">复制</text>
+          </view>
+          <text class="step-hint">复制后在终端粘贴运行，一键完成安装和连接</text>
+        </view>
+      </view>
+      <view class="setup-step">
+        <view class="step-num {{step === 'connecting' ? 'active' : step === 'connected' ? 'done' : ''}}">2</view>
+        <view class="step-content">
+          <text class="step-title">等待连接</text>
+          <view wx:if="{{step === 'connecting'}}" class="connecting">
+            <view class="connecting-dots"><view /><view /><view /></view>
+            <text class="connecting-text">等待终端连接...</text>
+          </view>
+          <view wx:if="{{step === 'connected'}}" class="connecting">
+            <text class="connected-text">已连接</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{step === 'connected'}}" class="setup-success">
+      <view class="success-icon"></view>
+      <text class="success-title">已连接</text>
+      <text class="success-hint">正在加载会话...</text>
+    </view>
+
+    <view wx:if="{{error}}" class="setup-error">
+      <text>{{error}}</text>
+      <text class="retry-btn" bindtap="onRetry">重试</text>
+    </view>
+
+    <view wx:if="{{step === 'show_command' || step === 'connecting'}}" class="setup-reset">
+      <text class="reset-btn" bindtap="onResetConnection">重新连接</text>
+      <text class="reset-btn troubleshoot-btn" bindtap="onShowTroubleshoot">连接问题排查</text>
+    </view>
+
+    <view wx:if="{{step === 'connected' || step === 'loading' || error}}" class="setup-reset">
+      <text class="reset-btn troubleshoot-btn" bindtap="onShowTroubleshoot">连接问题排查</text>
+    </view>
+
+    <view class="setup-contact">
+      <button class="guide-contact-btn" open-type="contact">联系客服</button>
+    </view>
+  </view>
+
+  <view class="setup-footer">
+    <text class="footer-slogan">Powered by Local Claude Code.</text>
+  </view>
+
+  <view wx:if="{{showTroubleshoot}}" class="troubleshoot-mask" bindtap="onHideTroubleshoot">
+    <view class="troubleshoot-panel" catchtap="">
+      <view class="ts-header">
+        <text class="ts-title">连接问题排查</text>
+        <text class="ts-close" bindtap="onHideTroubleshoot">✕</text>
+      </view>
+      <scroll-view scrollY class="ts-body">
+        <view class="ts-section">
+          <text class="ts-section-title">1. 检查 Key 是否一致</text>
+          <text class="ts-hint">小程序 Key：</text>
+          <view class="ts-key-box">
+            <text class="ts-key-text">{{relayKey || '未获取'}}</text>
+            <text class="ts-copy-btn" bindtap="onCopyKey">复制</text>
+          </view>
+          <text class="ts-hint">终端执行以下命令查看 Key：</text>
+          <view class="ts-cmd-box">
+            <text class="ts-cmd-text">cat ~/.codepocket/config.json</text>
+            <text class="ts-copy-btn" bindtap="onCopyCmd1">复制</text>
+          </view>
+          <text class="ts-hint">确认两边 Key 一致。</text>
+        </view>
+        <view class="ts-section">
+          <text class="ts-section-title">2. 确认终端已运行</text>
+          <text class="ts-hint">终端应执行了以下命令：</text>
+          <view class="ts-cmd-box">
+            <text class="ts-cmd-text">codepocket</text>
+            <text class="ts-copy-btn" bindtap="onCopyCmd2">复制</text>
+          </view>
+          <text class="ts-hint">终端应显示 [codepocket] ✓ 已连接中继</text>
+        </view>
+        <view class="ts-section">
+          <text class="ts-section-title">3. 网络检查</text>
+          <text class="ts-hint">• 手机和电脑都需要能访问互联网</text>
+          <text class="ts-hint">• 尝试切换 WiFi / 4G 重试</text>
+          <text class="ts-hint">• 公司网络可能限制了 WebSocket</text>
+        </view>
+        <view class="ts-section" style="padding-top: 16rpx;">
+          <text class="ts-retry-btn" bindtap="onRetry">重试配对</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+</view>

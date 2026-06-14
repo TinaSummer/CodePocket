@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.claude/
+logs/
+*.log
+.DS_Store
+vendor/

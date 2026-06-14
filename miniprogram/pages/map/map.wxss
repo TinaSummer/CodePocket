@@ -1,0 +1,152 @@
+/* ── Map view ── */
+.stats-panel {
+  position: fixed;
+  top: 20rpx;
+  left: 20rpx;
+  right: 20rpx;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 16rpx;
+  padding: 20rpx 16rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-around;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-value {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.stat-label {
+  font-size: 20rpx;
+  color: #999;
+  margin-top: 4rpx;
+}
+
+.done-btn {
+  position: fixed;
+  bottom: 60rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1677FF;
+  color: #fff;
+  font-size: 32rpx;
+  padding: 20rpx 120rpx;
+  border-radius: 44rpx;
+  box-shadow: 0 4rpx 16rpx rgba(22, 119, 255, 0.4);
+}
+
+/* ── Empty state ── */
+.empty-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 160rpx 48rpx 0;
+  background: #f9fafb;
+  box-sizing: border-box;
+}
+
+.empty-icon {
+  width: 96rpx; height: 96rpx;
+  border-radius: 24rpx;
+  background: rgba(102, 126, 234, 0.08);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 28rpx;
+}
+
+.empty-title {
+  font-size: 32rpx; font-weight: 600; color: #1d2129;
+  margin-bottom: 12rpx;
+}
+
+.empty-desc {
+  font-size: 26rpx; color: #86909c; line-height: 1.6;
+  text-align: center; margin-bottom: 40rpx;
+}
+
+.empty-action {
+  background: #667eea;
+  padding: 18rpx 64rpx;
+  border-radius: 40rpx;
+}
+
+.empty-action:active { opacity: 0.85; }
+
+.empty-action-text {
+  font-size: 28rpx; font-weight: 600; color: #ffffff;
+}
+
+/* ── History ── */
+.history-section {
+  width: 100%;
+  margin-top: 56rpx;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4rpx;
+  margin-bottom: 16rpx;
+}
+
+.history-title {
+  font-size: 26rpx; font-weight: 600; color: #1d2129;
+}
+
+.history-toggle {
+  font-size: 24rpx; color: #667eea; font-weight: 500;
+}
+
+.history-list {
+  background: #ffffff;
+  border: 1rpx solid #f2f3f5;
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 24rpx;
+  border-bottom: 0.5rpx solid #f2f3f5;
+}
+
+.history-item:last-child { border-bottom: none; }
+
+.history-info {
+  flex: 1;
+}
+
+.history-info:active { opacity: 0.7; }
+
+.history-name {
+  display: block;
+  font-size: 28rpx; font-weight: 500; color: #1d2129;
+  margin-bottom: 4rpx;
+}
+
+.history-meta {
+  font-size: 22rpx; color: #c9cdd4;
+}
+
+.history-delete {
+  width: 48rpx; height: 48rpx;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.history-delete-icon {
+  font-size: 22rpx; color: #c9cdd4;
+}

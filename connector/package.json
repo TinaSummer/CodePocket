@@ -1,0 +1,31 @@
+{
+  "name": "@tina_summer/codepocket",
+  "version": "2.4.0",
+  "description": "CodePocket — 基于ClaudeCode的微信小程序工作台",
+  "bin": {
+    "codepocket": "bin/codepocket.js",
+    "cpkt": "bin/codepocket.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "vendor"
+  ],
+  "scripts": {
+    "start": "node bin/codepocket.js"
+  },
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "codepocket",
+    "claude",
+    "wechat",
+    "ai"
+  ],
+  "license": "MIT"
+}

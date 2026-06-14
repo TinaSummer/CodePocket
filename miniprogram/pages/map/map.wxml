@@ -1,0 +1,72 @@
+<!-- Map view -->
+<block wx:if="{{mode === 'map'}}">
+  <map
+    id="map"
+    latitude="{{center.lat}}"
+    longitude="{{center.lng}}"
+    scale="{{scale}}"
+    markers="{{wxMarkers}}"
+    polyline="{{wxPolyline}}"
+    show-location
+    style="width: 100%; height: 100vh;"
+  />
+
+  <view class="stats-panel" wx:if="{{stats.show}}">
+    <view class="stat-row">
+      <view class="stat-item">
+        <text class="stat-value">{{stats.distance}}</text>
+        <text class="stat-label">距离</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-value">{{stats.duration}}</text>
+        <text class="stat-label">时间</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-value">{{stats.speed}}</text>
+        <text class="stat-label">均速</text>
+      </view>
+      <view class="stat-item">
+        <text class="stat-value">{{stats.points}}</text>
+        <text class="stat-label">采样点</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="done-btn" bindtap="onDone">完成</view>
+
+  <!-- Hidden canvas for share screenshot -->
+  <canvas type="2d" id="shareCanvas" style="position:fixed;left:-9999px;width:500px;height:400px;" />
+</block>
+
+<!-- Empty state -->
+<block wx:else>
+  <view class="empty-page">
+    <view class="empty-icon">
+      <image src="/assets/icons/navigation-purple.png" mode="aspectFit" style="width:48rpx;height:48rpx;"/>
+    </view>
+    <text class="empty-title">还没有地图数据</text>
+    <text class="empty-desc">在对话中让 AI 记录你的轨迹路线，或标记地点，数据会在这里展示。</text>
+    <view class="empty-action" bindtap="onGoChat">
+      <text class="empty-action-text">去试试</text>
+    </view>
+
+    <!-- History -->
+    <view class="history-section" wx:if="{{history.length > 0}}">
+      <view class="history-header" bindtap="onHistoryTap">
+        <text class="history-title">历史记录</text>
+        <text class="history-toggle">{{showHistory ? '收起' : '查看全部 (' + history.length + ')'}}</text>
+      </view>
+      <view class="history-list" wx:if="{{showHistory}}">
+        <view wx:for="{{history}}" wx:key="id" class="history-item">
+          <view class="history-info" bindtap="onViewHistory" data-id="{{item.id}}">
+            <text class="history-name">{{item.title}}</text>
+            <text class="history-meta">{{item.timeText}} · {{item.pointCount}} 个点</text>
+          </view>
+          <view class="history-delete" catchtap="onDeleteHistory" data-id="{{item.id}}">
+            <text class="history-delete-icon">✕</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</block>

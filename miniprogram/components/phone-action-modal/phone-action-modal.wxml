@@ -1,0 +1,98 @@
+<view class="modal-mask" wx:if="{{visible}}" bindtap="onCancel">
+  <view class="modal-dialog" catchtap="preventBubble">
+    <view class="modal-header">
+      <text class="modal-title">{{modalTitle}}</text>
+    </view>
+    <view class="modal-body">
+      <!-- Calendar add -->
+      <block wx:if="{{tool === 'phone_calendar_add'}}">
+        <view class="modal-item" wx:if="{{params.title}}">
+          <text class="modal-label">事件</text>
+          <text class="modal-value">{{params.title}}</text>
+        </view>
+        <view class="modal-item" wx:if="{{params.startTime}}">
+          <text class="modal-label">时间</text>
+          <text class="modal-value">{{timeDisplay}}</text>
+        </view>
+        <view class="modal-item" wx:if="{{params.reminderAlarm}}">
+          <text class="modal-label">提醒</text>
+          <text class="modal-value">提前 {{params.reminderAlarm}} 分钟</text>
+        </view>
+        <view class="modal-hint">
+          <text class="hint-text">点击确认后，系统还会弹一次日历确认框</text>
+        </view>
+      </block>
+
+      <!-- Todo add -->
+      <block wx:elif="{{tool === 'phone_todo_add'}}">
+        <view class="modal-item" wx:if="{{params.title}}">
+          <text class="modal-label">待办</text>
+          <text class="modal-value">{{params.title}}</text>
+        </view>
+        <view class="modal-item" wx:if="{{params.dueDate}}">
+          <text class="modal-label">截止</text>
+          <text class="modal-value">{{dueDateDisplay}}</text>
+        </view>
+        <view class="modal-item" wx:if="{{params.priority}}">
+          <text class="modal-label">优先级</text>
+          <text class="modal-value">{{params.priority}}</text>
+        </view>
+      </block>
+
+      <!-- Todo complete -->
+      <block wx:elif="{{tool === 'phone_todo_complete'}}">
+        <view class="modal-item">
+          <text class="modal-label">完成待办</text>
+          <text class="modal-value">{{params.todoId}}</text>
+        </view>
+      </block>
+
+      <!-- Location get -->
+      <block wx:elif="{{tool === 'phone_location_get'}}">
+        <view class="modal-item">
+          <text class="modal-value">请求获取当前位置</text>
+        </view>
+      </block>
+
+      <!-- Location track -->
+      <block wx:elif="{{tool === 'phone_location_track'}}">
+        <view class="modal-item">
+          <text class="modal-value">请求追踪位置 {{params.duration || 300}}秒</text>
+        </view>
+      </block>
+
+      <!-- Notification send -->
+      <block wx:elif="{{tool === 'phone_notification_send'}}">
+        <view class="modal-item" wx:if="{{params.title}}">
+          <text class="modal-label">标题</text>
+          <text class="modal-value">{{params.title}}</text>
+        </view>
+        <view class="modal-item" wx:if="{{params.body}}">
+          <text class="modal-label">内容</text>
+          <text class="modal-value">{{params.body}}</text>
+        </view>
+        <view class="modal-item" wx:if="{{params.at}}">
+          <text class="modal-label">定时</text>
+          <text class="modal-value">{{atDisplay}}</text>
+        </view>
+      </block>
+
+      <!-- Clipboard write -->
+      <block wx:elif="{{tool === 'phone_clipboard_write'}}">
+        <view class="modal-item">
+          <text class="modal-label">复制到剪贴板</text>
+          <text class="modal-value clip-text">{{params.text}}</text>
+        </view>
+      </block>
+    </view>
+
+    <view class="modal-actions">
+      <view class="modal-btn modal-btn-cancel" bindtap="onCancel">
+        <text>取消</text>
+      </view>
+      <view class="modal-btn modal-btn-confirm" bindtap="onConfirm">
+        <text>确认</text>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,118 @@
+<view class="session-page">
+  <!-- Hub offline: terminal not running -->
+  <view wx:if="{{hubOffline}}" class="session-empty">
+    <view class="session-empty-icon">
+      <image src="/assets/icons/bolt.svg" mode="aspectFit" style="width:80rpx;height:80rpx;"/>
+    </view>
+    <text class="session-empty-title">终端未连接</text>
+    <text class="session-empty-hint">请在终端运行以下命令：</text>
+    <text class="session-empty-cmd" bindtap="onCopyCmd">npx @tina_summer/codepocket</text>
+    <text class="session-empty-hint" style="margin-top:16rpx">启动后会自动显示会话</text>
+    <view class="session-empty-retry" bindtap="onRetryHub">重试</view>
+  </view>
+
+  <view wx:if="{{sessions.length === 0 && !loading && !hubOffline}}" class="session-empty">
+    <view class="session-empty-icon">
+      <image src="/assets/icons/bolt.svg" mode="aspectFit" style="width:80rpx;height:80rpx;"/>
+    </view>
+    <text class="session-empty-title">暂无会话</text>
+    <text class="session-empty-hint">在终端运行 npx @tina_summer/codepocket 开始一个会话</text>
+  </view>
+
+  <!-- Editing toolbar -->
+  <view wx:if="{{editing}}" class="edit-bar">
+    <text class="edit-info">已选 {{selectedIds.length}} 项</text>
+    <view class="edit-bar-actions">
+      <text class="edit-btn" bindtap="onSelectAll">全选</text>
+      <text class="edit-btn edit-btn-danger" bindtap="onDeleteSelected">删除</text>
+      <text class="edit-btn" bindtap="onCancelEdit">取消</text>
+    </view>
+  </view>
+
+  <view wx:for="{{sessions}}" wx:key="id"
+    class="session-card {{editing ? 'editable' : ''}} {{item._selected ? 'selected' : ''}}"
+    bindtap="{{editing ? 'onToggleSelect' : 'openSession'}}"
+    bindlongpress="onLongPress"
+    data-id="{{item.id}}" data-active="{{item.active}}">
+    <view class="session-card-header">
+      <!-- Checkbox in editing mode -->
+      <view wx:if="{{editing}}" class="session-checkbox {{item._selected ? 'checked' : ''}}">
+        <view wx:if="{{item._selected}}" class="checkbox-dot"></view>
+      </view>
+      <view class="session-status-dot {{item.active ? 'active' : (item.idle ? 'idle' : 'stopped')}}"></view>
+      <text class="session-name">{{item.name || item.id}}</text>
+      <!-- Action buttons (normal mode only) -->
+      <view wx:if="{{!editing && item.active}}" class="session-action" catchtap="onAbortSession" data-id="{{item.id}}">
+        <text class="action-stop">■</text>
+      </view>
+      <view wx:elif="{{!editing && !item.active}}" class="session-action" catchtap="onResumeSession" data-id="{{item.id}}" data-name="{{item.summary.text}}">
+        <text class="action-resume">▶</text>
+      </view>
+    </view>
+    <text class="session-meta">{{item.agent || 'claude'}} · {{item.path || ''}}</text>
+    <text wx:if="{{item.summary}}" class="session-summary">{{item.summary}}</text>
+    <view class="session-badges">
+      <text class="badge badge-agent">{{item.agent || 'claude'}}</text>
+      <text wx:if="{{item.pendingCount > 0}}" class="badge badge-pending">{{item.pendingCount}} 待审批</text>
+    </view>
+  </view>
+
+  <!-- New session FAB -->
+  <view wx:if="{{!editing}}" class="session-fab" bindtap="onNewSession">
+    <text class="session-fab-text">+</text>
+  </view>
+
+  <!-- New session dialog with directory browser -->
+  <view wx:if="{{showNewSession}}" class="ns-overlay" bindtap="onCancelNewSession">
+    <view class="ns-dialog" catchtap="noop">
+      <text class="ns-title">启动新会话</text>
+      <!-- Path input -->
+      <view class="ns-path-row">
+        <input
+          class="ns-input"
+          placeholder="目录路径，如 ~/my-project"
+          value="{{newSessionDir}}"
+          bindinput="onInputNewDir"
+          bindconfirm="onLoadDir"
+          focus="{{showNewSession}}"
+        />
+        <view class="ns-path-go" bindtap="onLoadDir">
+          <text>→</text>
+        </view>
+      </view>
+      <!-- Directory list -->
+      <view class="ns-dir-list">
+        <view wx:if="{{dirLoading}}" class="ns-dir-loading">
+          <text>加载中...</text>
+        </view>
+        <view wx:elif="{{dirError}}" class="ns-dir-error">
+          <text>{{dirError}}</text>
+        </view>
+        <view wx:elif="{{dirEntries.length === 0}}" class="ns-dir-empty">
+          <text>无子目录</text>
+        </view>
+        <block wx:else>
+          <!-- Parent dir -->
+          <view class="ns-dir-item ns-dir-parent" bindtap="onGoParentDir">
+            <text class="ns-dir-icon">📁</text>
+            <text class="ns-dir-name">..</text>
+          </view>
+          <view wx:for="{{dirEntries}}" wx:key="name" class="ns-dir-item" bindtap="onTapDirEntry" data-path="{{item.path}}" data-name="{{item.name}}">
+            <text class="ns-dir-icon">📁</text>
+            <text class="ns-dir-name">{{item.name}}</text>
+            <text class="ns-dir-arrow">›</text>
+          </view>
+        </block>
+      </view>
+      <text class="ns-hint">选择或输入目录路径，启动 Claude Code 进程</text>
+      <view class="ns-actions">
+        <view class="ns-btn ns-btn-cancel" bindtap="onCancelNewSession">
+          <text>取消</text>
+        </view>
+        <view class="ns-btn ns-btn-ok {{spawning ? 'disabled' : ''}}" bindtap="onConfirmNewSession">
+          <text>{{spawning ? '启动中...' : '启动'}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

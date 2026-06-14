@@ -1,0 +1,291 @@
+/* Index page — session list styles are in app.wxss */
+
+.session-action {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 12rpx;
+}
+
+.action-stop {
+  font-size: 22rpx;
+  color: #fff;
+  background: var(--danger);
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.action-resume {
+  font-size: 18rpx;
+  color: #fff;
+  background: var(--success);
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding-left: 3rpx;
+}
+
+/* ── Editing mode ── */
+
+.edit-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 32rpx;
+  background: var(--bg-2);
+  border-bottom: 1rpx solid var(--border-1);
+}
+
+.edit-info {
+  font-size: 26rpx;
+  color: var(--text-2);
+}
+
+.edit-bar-actions {
+  display: flex;
+  gap: 32rpx;
+}
+
+.edit-btn {
+  font-size: 26rpx;
+  color: var(--primary);
+  padding: 8rpx 0;
+}
+
+.edit-btn-danger {
+  color: var(--danger);
+}
+
+
+.session-card.editable {
+  position: relative;
+}
+
+.session-card.selected {
+  background: var(--bg-hover);
+}
+
+.session-checkbox {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  border: 3rpx solid var(--bg-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 16rpx;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+}
+
+.session-checkbox.checked {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.checkbox-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* ── FAB ── */
+
+.session-fab {
+  position: fixed;
+  right: 40rpx;
+  bottom: calc(60rpx + env(safe-area-inset-bottom));
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  background: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8rpx 24rpx rgba(102, 126, 234, 0.35);
+  z-index: 10;
+}
+
+.session-fab-text {
+  font-size: 48rpx;
+  color: #fff;
+  line-height: 1;
+  margin-top: -4rpx;
+}
+
+/* ── New session dialog ── */
+
+.ns-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.ns-dialog {
+  width: 650rpx;
+  max-height: 85vh;
+  background: var(--bg-1);
+  border-radius: 24rpx;
+  padding: 48rpx 40rpx 36rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+.ns-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 24rpx;
+}
+
+.ns-input {
+  height: 72rpx;
+  background: var(--bg-2);
+  border-radius: 12rpx;
+  padding: 0 24rpx;
+  font-size: 26rpx;
+  font-family: 'SF Mono', Menlo, monospace;
+  color: var(--text-1);
+  box-sizing: border-box;
+}
+
+.ns-hint {
+  display: block;
+  font-size: 24rpx;
+  color: var(--text-3);
+  margin-top: 16rpx;
+  margin-bottom: 32rpx;
+}
+
+.ns-actions {
+  display: flex;
+  gap: 20rpx;
+  justify-content: flex-end;
+}
+
+.ns-btn {
+  padding: 16rpx 40rpx;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+}
+
+.ns-btn-cancel {
+  background: var(--bg-2);
+  color: var(--text-2);
+}
+
+.ns-btn-ok {
+  background: var(--primary);
+  color: #fff;
+}
+
+.ns-btn-ok.disabled {
+  opacity: 0.5;
+}
+
+/* ── Directory browser ── */
+
+.ns-path-row {
+  display: flex;
+  gap: 12rpx;
+  align-items: center;
+}
+
+.ns-path-row .ns-input {
+  flex: 1;
+}
+
+.ns-path-go {
+  width: 72rpx;
+  height: 72rpx;
+  background: var(--primary);
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.ns-path-go:active {
+  opacity: 0.8;
+}
+
+.ns-dir-list {
+  max-height: 400rpx;
+  overflow-y: auto;
+  margin-top: 16rpx;
+  border-radius: 12rpx;
+  background: var(--bg-2);
+}
+
+.ns-dir-loading,
+.ns-dir-error,
+.ns-dir-empty {
+  padding: 32rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--text-3);
+}
+
+.ns-dir-error {
+  color: var(--danger);
+}
+
+.ns-dir-item {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 20rpx 24rpx;
+  border-bottom: 1rpx solid var(--border-1);
+}
+
+.ns-dir-item:last-child {
+  border-bottom: none;
+}
+
+.ns-dir-item:active {
+  background: var(--bg-hover);
+}
+
+.ns-dir-icon {
+  font-size: 28rpx;
+  flex-shrink: 0;
+}
+
+.ns-dir-name {
+  flex: 1;
+  font-size: 26rpx;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ns-dir-arrow {
+  font-size: 28rpx;
+  color: var(--text-3);
+  flex-shrink: 0;
+}

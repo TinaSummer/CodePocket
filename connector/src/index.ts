@@ -1,12 +1,12 @@
 /**
- * CodePocket Connector — 在用户机器上运行，桥接本地 Hapi Hub 和远程 Relay
+ * CodePocket Connector — 在用户机器上运行，桥接本地 Hub 和远程 Relay
  *
  * 用法:
  *   bun run src/index.ts                          # 自动发现本地 hub
  *   bun run src/index.ts --hub http://localhost:3006 --relay wss://relay.example.com/ws
  *
  * 工作流程:
- *   1. 连接本地 Hapi Hub REST API，获取 CLI_API_TOKEN
+ *   1. 连接本地 Hub REST API，获取 CLI_API_TOKEN
  *   2. 用 token 调用 /api/auth 获取 JWT
  *   3. 开启 SSE 流，接收实时事件
  *   4. 连接远程 Relay WebSocket

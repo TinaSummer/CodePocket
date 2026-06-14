@@ -61,10 +61,10 @@ if ! command -v bun &>/dev/null; then
   export PATH="$HOME/.bun/bin:$PATH"
 fi
 
-# 2. Install Hapi CLI
-echo "[2/5] 安装 Hapi CLI..."
+# 2. Install Hub CLI
+echo "[2/5] 安装 Hub CLI..."
 if ! command -v hapi &>/dev/null; then
-  bun install -g @your-org/hapi 2>/dev/null || npm install -g @your-org/hapi
+  bun install -g @twsxtd/hapi 2>/dev/null || npm install -g @twsxtd/hapi
 fi
 
 # 3. Setup project
@@ -80,7 +80,7 @@ echo "[4/5] 配置 systemd 服务..."
 
 sudo tee /etc/systemd/system/hapi-hub.service > /dev/null <<EOF
 [Unit]
-Description=Hapi Hub
+Description=CodePocket Hub
 After=network.target
 
 [Service]

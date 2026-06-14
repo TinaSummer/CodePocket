@@ -8,7 +8,7 @@ set -euo pipefail
 #   bash dev-tunnel.sh
 #
 # 前提:
-#   1. 已启动 hapi hub (默认 :3006)
+#   1. 已启动 Hub (默认 :3006)
 #   2. 已安装 cloudflared (brew install cloudflared)
 
 echo "=== CodePocket 本地开发隧道 ==="

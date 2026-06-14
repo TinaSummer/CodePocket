@@ -481,7 +481,7 @@ cd /opt/codemind-relay && npm install --production && pm2 restart codemind-relay
 ```
 用户电脑                              服务器(宝塔)                        微信小程序
 ┌──────────┐     WebSocket      ┌─────────────────┐    wss://     ┌──────────┐
-│ hapi hub │ ─────────────────→ │ Relay (Node.js)  │ ←────────── │ MiniProg │
+│   Hub    │ ─────────────────→ │ Relay (Node.js)  │ ←────────── │ MiniProg │
 │ (本地)   │   connector 进程   │ 127.0.0.1:3010  │  Nginx 443  │          │
 └──────────┘                    └─────────────────┘             └──────────┘
                                        ↑

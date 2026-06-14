@@ -1,4 +1,4 @@
-# Hapi WeChat 微信小程序 - 完整部署
+# CodePocket 微信小程序 - 完整部署
 #
 # 使用方式:
 #   1. cp .env.example .env && 编辑 .env 填写域名
@@ -7,27 +7,26 @@
 #   4. 小程序填入 https://your-domain.com 作为代理地址
 #
 # 包含:
-#   - hapi-hub (Claude Code 控制中心)
-#   - hapi-proxy (SSE→WebSocket 代理)
-#   - caddy (自动 HTTPS + WSS 反向代理)
+#   - Hub (Claude Code 控制中心)
+#   - Proxy (SSE→WebSocket 代理)
+#   - Caddy (自动 HTTPS + WSS 反向代理)
 #
-# 注意: Hub 的 Dockerfile 需要单独构建
-#   cd ../hapi && docker build -t hapi-hub .
-#   或者直接用 npm 全局安装方式运行 (见下方注释)
+# 注意: Hub 的 Dockerfile 需要单独构建（Hub 二进制不在本仓库内）
+#   参考 Hub 文档构建镜像，或用 npm 全局安装方式运行（见下方注释）
 
 services:
-  # 方式一: 如果你有 hapi 的 Docker 镜像
+  # 方式一: 如果你有 Hub 的 Docker 镜像
   # hapi-hub:
   #   image: hapi-hub:latest
   #   ...
 
-  # 方式二: 直接用 bun 运行 hapi (推荐简单起见)
+  # 方式二: 直接用 bun 运行 Hub 源码（推荐简单起见）
   hapi-hub:
     image: oven/bun:1.3
     container_name: hapi-hub
     restart: unless-stopped
     working_dir: /app
-    # 把本地 hapi 项目挂载进去
+    # 把本地 Hub 项目挂载进去
     volumes:
       - ../hapi:/app:ro
       - hapi-data:/root/.hapi

@@ -68,7 +68,7 @@ codepocket status             # 查看运行状态
 ## 项目结构
 
 ```
-codemind/
+codepocket/
 ├── connector/        # npm CLI 包 (@tina_summer/codepocket)
 │   ├── bin/          # CLI 入口
 │   ├── src/          # MCP server、connector 逻辑
@@ -112,7 +112,7 @@ Relay 是纯转发中间人，负责路由消息。CLI 和小程序通过 Relay 
 ### 小程序开发
 
 1. 安装 [微信开发者工具](https://developers.weixin.qq.com/miniprogram/dev/devtools/download.html)
-2. 导入 `codemind/` 目录
+2. 导入 `codepocket/` 目录
 3. 复制 `miniprogram/utils/config.js` 为 `miniprogram/utils/config.local.js`，填入你的 Relay 地址
 4. AppID 使用 `测试号` 或在 `project.config.json` 中填入你自己的
 

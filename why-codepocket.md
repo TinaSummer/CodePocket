@@ -210,21 +210,6 @@ Connector 已经是一个 Node.js 长驻进程。如果把 MCP 服务器做成�
 - **一次命令完成全部操作**：`npm i -g` + `codepocket --key` 合并，零学习成本
 - **持久令牌免重复配对**：后续启动双方自动用令牌重连，Relay 支持断线延迟清理（5 分钟内重连可复用会话）
 
-## 与 HAPI 的关系
-
-CodePocket 和 HAPI 解决同一个问题的不同层面：
-
-| 维度 | HAPI | CodePocket |
-|------|------|-----------|
-| **目标** | 通用 AI Agent 远程控制 | Claude Code 专用的移动控制台 |
-| **客户端** | Web/PWA/Telegram | WeChat 小程序 |
-| **定位** | 通用框架 | 垂直整合体验 |
-| **手机能力** | 无（Web 环境） | GPS、日历、剪贴板、地图 |
-| **协议** | WireGuard + TLS | WebSocket + REST 隧道 |
-| **分发** | URL 扫码 | 微信生态内 |
-
-CodePocket 依赖 HAPI 提供的 Hub 二进制（`cpkt-hub`）来管理 Claude Code 进程。Hub 负责 Claude Code 的生命周期管理、消息持久化、SSE 事件推送。CodePocket 的 Connector 桥接 Relay 和 Hub，小程序专注移动端体验。
-
 ## 总结
 
 CodePocket 存在的原因可以归结为一句话：

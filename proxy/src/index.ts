@@ -88,7 +88,7 @@ async function proxyJson(c: any, path: string, init?: RequestInit) {
   return c.json(await res.json(), res.status as any)
 }
 
-// --- REST routes (proxy to Hapi Hub) ---
+// --- REST routes (proxy to Hub) ---
 
 app.post('/api/auth', async (c) => {
   const body = await c.req.json<{ accessToken: string }>()

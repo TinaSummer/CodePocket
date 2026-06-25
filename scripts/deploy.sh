@@ -17,7 +17,7 @@ set -euo pipefail
 DOMAIN="${DOMAIN:-your-domain.com}"
 RELAY_PORT=3010
 INSTALL_DIR="/opt/codepocket-relay"
-REPO_DIR="/opt/codemind"
+REPO_DIR="/opt/CodePocket"
 # 默认用国内可访问的镜像，可用环境变量 REPO_URL 覆盖
 REPO_URL="${REPO_URL:-https://kkgithub.com/TinaSummer/CodePocket.git}"
 GIT_BRANCH="main"

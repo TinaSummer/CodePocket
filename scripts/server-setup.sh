@@ -60,16 +60,16 @@ sudo tee "$INSTALL_DIR/package.json" > /dev/null <<'PKGEOF'
 }
 PKGEOF
 
-# Inline relay source (matches relay/src/index.node.js)
+# Inline relay source (matches relay/src/index.js)
 cat "$INSTALL_DIR/src/index.js" 2>/dev/null | head -1 | grep -q "CodePocket" && echo "  源码已存在，跳过" || {
   SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
   PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-  if [[ -f "$PROJECT_DIR/relay/src/index.node.js" ]]; then
-    sudo cp "$PROJECT_DIR/relay/src/index.node.js" "$INSTALL_DIR/src/index.js"
-    echo "  已复制 relay/src/index.node.js"
+  if [[ -f "$PROJECT_DIR/relay/src/index.js" ]]; then
+    sudo cp "$PROJECT_DIR/relay/src/index.js" "$INSTALL_DIR/src/index.js"
+    echo "  已复制 relay/src/index.js"
   else
-    echo "  [!] 未找到 relay/src/index.node.js"
+    echo "  [!] 未找到 relay/src/index.js"
     echo "  请确保项目已 clone 到服务器，或手动复制"
     exit 1
   fi

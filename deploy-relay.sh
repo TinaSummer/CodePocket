@@ -102,8 +102,8 @@ sudo mkdir -p "$INSTALL_DIR/src"
 
 # Copy relay source from local project
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-if [[ -f "$SCRIPT_DIR/relay/src/index.ts" ]]; then
-  sudo cp "$SCRIPT_DIR/relay/src/index.ts" "$INSTALL_DIR/src/index.ts"
+if [[ -f "$SCRIPT_DIR/relay/src/index.js" ]]; then
+  sudo cp "$SCRIPT_DIR/relay/src/index.js" "$INSTALL_DIR/src/index.js"
   sudo cp "$SCRIPT_DIR/relay/package.json" "$INSTALL_DIR/package.json"
 else
   # Inline fallback
@@ -112,12 +112,12 @@ else
   "name": "codepocket-relay",
   "version": "1.0.0",
   "private": true,
-  "scripts": { "start": "bun run src/index.ts" },
+  "scripts": { "start": "bun run src/index.js" },
   "dependencies": { "hono": "^4.7.0" }
 }
 PKGJSON
 
-  echo "[!] 本地 relay 源码未找到，请手动复制 relay/src/index.ts 到 $INSTALL_DIR/src/"
+  echo "[!] 本地 relay 源码未找到，请手动复制 relay/src/index.js 到 $INSTALL_DIR/src/"
   exit 1
 fi
 
@@ -149,7 +149,7 @@ Type=simple
 User=$RELAY_USER
 Group=$RELAY_USER
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$BUN_PATH run src/index.ts
+ExecStart=$BUN_PATH run src/index.js
 Restart=always
 RestartSec=3
 EnvironmentFile=/etc/codepocket-relay.env

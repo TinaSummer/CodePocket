@@ -98,15 +98,15 @@ pull_code() {
 }
 
 copy_relay() {
-  if [[ -f "$REPO_DIR/relay/src/index.node.js" ]]; then
-    cp "$REPO_DIR/relay/src/index.node.js" "$INSTALL_DIR/src/index.js"
+  if [[ -f "$REPO_DIR/relay/src/index.js" ]]; then
+    cp "$REPO_DIR/relay/src/index.js" "$INSTALL_DIR/src/index.js"
     # 同步 package.json 确保新依赖能被 npm install 安装
     if [[ -f "$REPO_DIR/relay/package.json" ]]; then
       cp "$REPO_DIR/relay/package.json" "$INSTALL_DIR/package.json"
     fi
     log_info "relay 代码已更新"
   else
-    log_error "未找到 relay/src/index.node.js"
+    log_error "未找到 relay/src/index.js"
     exit 1
   fi
 }

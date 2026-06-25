@@ -37,7 +37,7 @@ echo "  ✓ 代码已更新"
 
 echo "[2/3] 更新 relay..."
 
-sudo cp "$REPO_DIR/relay/src/index.node.js" "$INSTALL_DIR/src/index.js"
+sudo cp "$REPO_DIR/relay/src/index.js" "$INSTALL_DIR/src/index.js"
 
 cd "$INSTALL_DIR"
 

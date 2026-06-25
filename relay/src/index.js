@@ -37,6 +37,8 @@ const RELAY_PORT = parseInt(process.env.RELAY_PORT || '3010')
 const ADMIN_KEY = process.env.RELAY_KEYS || process.env.ADMIN_KEY || ''
 const WX_APPID = process.env.WX_APPID || ''
 const WX_SECRET = process.env.WX_SECRET || ''
+const ADMIN_OPENIDS = (process.env.ADMIN_OPENIDS || '')
+  .split(',').map(s => s.trim()).filter(Boolean)
 const DATA_DIR = process.env.DATA_DIR || '/opt/codepocket-relay/data'
 const KEYS_FILE = path.join(DATA_DIR, 'keys.json')
 
@@ -197,7 +199,11 @@ setInterval(() => {
 // ── Admin API ──
 
 function isAdminKey(key) {
-  return timingSafeEqual(key, ADMIN_KEY)
+  if (!key) return false
+  if (ADMIN_KEY && timingSafeEqual(key, ADMIN_KEY)) return true
+  // Admin-flagged user key (set via ADMIN_OPENIDS openid match)
+  const ownerKey = loadKeys().find(k => timingSafeEqual(k.key, key) && !k.revoked)
+  return !!(ownerKey && ownerKey.admin)
 }
 
 function timingSafeEqual(a, b) {
@@ -210,7 +216,26 @@ function timingSafeEqual(a, b) {
 
 app.post('/register/admin/check', async (c) => {
   const body = await c.req.json().catch(() => ({}))
-  return c.json({ isAdmin: isAdminKey(String(body.key || '')) })
+  const key = String(body.key || '')
+
+  // Openid path: wx.login code present → resolve openid → upgrade key if admin
+  if (body.code && WX_APPID && WX_SECRET) {
+    const openId = await getOpenId(String(body.code))
+    if (openId && ADMIN_OPENIDS.includes(openId)) {
+      // Promote the caller's existing key to admin status
+      const keys = loadKeys()
+      const owner = key ? keys.find(k => timingSafeEqual(k.key, key) && !k.revoked) : null
+        if (owner && !owner.admin) {
+          owner.admin = true
+          saveKeys(keys)
+          console.log(`[admin/check] upgraded key "${owner.name}" to admin via openid`)
+        }
+      return c.json({ isAdmin: true })
+    }
+    // openid present but not in whitelist — fall through to key check (for legacy ADMIN_KEY paste)
+  }
+
+  return c.json({ isAdmin: isAdminKey(key) })
 })
 
 function checkAdmin(c) {
@@ -237,7 +262,7 @@ app.get('/register/admin/keys', (c) => {
 // List keys (body key auth — used by mini-program)
 app.post('/register/admin/keys', async (c) => {
   const body = await c.req.json().catch(() => ({}))
-  if (!timingSafeEqual(String(body.key || ''), ADMIN_KEY)) return c.json({ error: 'Unauthorized' }, 401)
+  if (!isAdminKey(String(body.key || ''))) return c.json({ error: 'Unauthorized' }, 401)
   const keys = loadKeys().map(k => ({
     id: k.id, name: k.name, created: k.created,
     paired: !!k.lastPairedAt, lastPairedAt: k.lastPairedAt || null,
@@ -249,7 +274,7 @@ app.post('/register/admin/keys', async (c) => {
 // Revoke key (body key auth — used by mini-program)
 app.post('/register/admin/revoke', async (c) => {
   const body = await c.req.json().catch(() => ({}))
-  if (!timingSafeEqual(String(body.key || ''), ADMIN_KEY)) return c.json({ error: 'Unauthorized' }, 401)
+  if (!isAdminKey(String(body.key || ''))) return c.json({ error: 'Unauthorized' }, 401)
   const { id } = body
   if (!id) return c.json({ error: 'Provide id' }, 400)
   const keys = loadKeys()
@@ -357,10 +382,17 @@ app.post('/register', async (c) => {
   }
 
   // Dedup by open_id: return existing key if found
+  const isAdminOpenId = openId && ADMIN_OPENIDS.includes(openId)
   const keys = loadKeys()
   if (openId) {
     const existing = keys.find(k => k.openId === openId && !k.revoked)
     if (existing) {
+      // Upgrade existing key to admin if openid matches admin whitelist
+      if (isAdminOpenId && !existing.admin) {
+        existing.admin = true
+        saveKeys(keys)
+        console.log(`[register] upgraded key "${existing.name}" to admin (open_id match)`)
+      }
       console.log(`[register] returning existing key "${existing.name}" for open_id ${openId.slice(0, 8)}...`)
       return c.json({ key: existing.key, name: existing.name, id: existing.id }, 200)
     }
@@ -369,7 +401,7 @@ app.post('/register', async (c) => {
   const key = crypto.randomBytes(32).toString('hex')
   const id = `key_${Date.now()}`
   const name = `user_${id.slice(-6)}`
-  keys.push({ id, key, name, openId, created: Date.now(), revoked: false })
+  keys.push({ id, key, name, openId, created: Date.now(), revoked: false, admin: !!isAdminOpenId })
   saveKeys(keys)
   const rec = regAttempts.get(ip) || { count: 0, lastAttempt: 0 }
   rec.count++; rec.lastAttempt = Date.now()

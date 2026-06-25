@@ -92,12 +92,28 @@ Page({
   _checkAdmin() {
     const key = wx.getStorageSync('relay_key')
     if (!key) return
-    wx.request({
-      url: `${RELAY_HTTP}/register/admin/check`,
-      method: 'POST',
-      data: { key },
-      success: (res) => {
-        if (res.data?.isAdmin) this.setData({ isAdmin: true })
+    // Get fresh wx.login code so relay can resolve openid and auto-promote admin
+    wx.login({
+      success: ({ code }) => {
+        wx.request({
+          url: `${RELAY_HTTP}/register/admin/check`,
+          method: 'POST',
+          data: { key, code },
+          success: (res) => {
+            if (res.data?.isAdmin) this.setData({ isAdmin: true })
+          },
+        })
+      },
+      // If wx.login fails, fall back to legacy ADMIN_KEY path
+      fail: () => {
+        wx.request({
+          url: `${RELAY_HTTP}/register/admin/check`,
+          method: 'POST',
+          data: { key },
+          success: (res) => {
+            if (res.data?.isAdmin) this.setData({ isAdmin: true })
+          },
+        })
       },
     })
   },

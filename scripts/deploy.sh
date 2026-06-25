@@ -50,9 +50,11 @@ start_service() {
     exit 1
   fi
 
-  # 如果 PM2 里已有该服务，直接 restart
-  if pm2 pid "$SERVICE_NAME" &>/dev/null; then
-    pm2 restart "$SERVICE_NAME"
+  # 检查 PM2 中是否已有该进程（pm2 pid 退出码不可靠，改用输出判断）
+  local pid
+  pid=$(pm2 pid "$SERVICE_NAME" 2>/dev/null || true)
+  if [[ "$pid" =~ ^[0-9]+$ ]]; then
+    pm2 restart "$SERVICE_NAME" --update-env
   else
     cd "$INSTALL_DIR"
     # 从环境文件读取变量
@@ -299,7 +301,9 @@ do_update() {
   if [[ -f /etc/codepocket-relay.env ]]; then
     export $(grep -v '^#' /etc/codepocket-relay.env | xargs)
   fi
-  if pm2 pid "$SERVICE_NAME" &>/dev/null; then
+  local pid
+  pid=$(pm2 pid "$SERVICE_NAME" 2>/dev/null || true)
+  if [[ "$pid" =~ ^[0-9]+$ ]]; then
     pm2 restart "$SERVICE_NAME" --update-env
   else
     cd "$INSTALL_DIR"

@@ -176,7 +176,7 @@ module.exports.formatDate = formatDate
 
   <view class="section-label">关于</view>
   <view class="settings-group">
-    <view class="settings-row">
+    <view class="settings-row" bindlongpress="onShowAdminLogin">
       <view class="settings-icon gray">
         <image class="si-img" src="/assets/icons/info-gray.png" mode="aspectFit"/>
       </view>

@@ -197,7 +197,7 @@ setInterval(() => {
 // ── Admin API ──
 
 function isAdminKey(key) {
-  return timingSafeEqual(key, ADMIN_KEY) || isValidKey(key) && loadKeys().find(k => timingSafeEqual(k.key, key) && !k.revoked)
+  return timingSafeEqual(key, ADMIN_KEY)
 }
 
 function timingSafeEqual(a, b) {

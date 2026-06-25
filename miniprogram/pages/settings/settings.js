@@ -12,7 +12,7 @@ const PRESET_WALLPAPERS = [
 Page({
   data: {
     connected: false,
-    version: 'v1.0.0',
+    version: 'v2.0.0',
     wallpaperName: '默认',
     showWallpaperPicker: false,
     selectedWallpaper: '',
@@ -98,6 +98,36 @@ Page({
       data: { key },
       success: (res) => {
         if (res.data?.isAdmin) this.setData({ isAdmin: true })
+      },
+    })
+  },
+
+  onShowAdminLogin() {
+    wx.showModal({
+      title: '管理员登录',
+      editable: true,
+      placeholderText: '粘贴 ADMIN_KEY',
+      confirmText: '登录',
+      cancelText: '取消',
+      success: (res) => {
+        if (!res.confirm) return
+        const key = (res.content || '').trim()
+        if (!key) return
+        wx.request({
+          url: `${RELAY_HTTP}/register/admin/check`,
+          method: 'POST',
+          data: { key },
+          success: (r) => {
+            if (r.data?.isAdmin) {
+              wx.setStorageSync('relay_key', key)
+              this.setData({ isAdmin: true })
+              wx.showToast({ title: '已切换为管理员', icon: 'success' })
+            } else {
+              wx.showToast({ title: '该 Key 无管理员权限', icon: 'none' })
+            }
+          },
+          fail: () => wx.showToast({ title: '网络错误', icon: 'none' }),
+        })
       },
     })
   },

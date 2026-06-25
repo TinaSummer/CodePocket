@@ -86,6 +86,11 @@ show_logs() {
 # ========== 代码 ==========
 
 pull_code() {
+  # 已存在本地代码（手动复制），跳过网络操作
+  if [[ -f "$REPO_DIR/relay/src/index.js" ]]; then
+    log_info "检测到本地代码 $REPO_DIR/relay/src/index.js，跳过拉取"
+    return 0
+  fi
   if [[ -d "$REPO_DIR/.git" ]]; then
     cd "$REPO_DIR"
     log_info "拉取最新代码..."

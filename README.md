@@ -14,6 +14,8 @@
 - **文件预览** — 在线预览 Claude 生成的代码和文件
 - **分享对话** — 一键导出对话记录，生成分享链接
 - **Daemon 模式** — 后台常驻运行，开机自启
+- **自部署 Relay** — 用户可部署自己的 Relay 服务器，小程序中填入地址即可使用
+- **代理支持** — 自动识别 `HTTPS_PROXY` / `HTTP_PROXY` 环境变量，公司网络可用
 
 ## 快速开始
 
@@ -23,7 +25,17 @@
 npm i -g @tina_summer/codepocket
 ```
 
-### 2. 启动
+### 2. 安装 Hub 二进制
+
+Connector 启动时需要 `cpkt-hub` 二进制 (Claude Code 进程管理器)，npm 包不含此文件：
+
+```bash
+codepocket install-hub
+```
+
+自动检测平台并从 [GitHub Releases](https://github.com/TinaSummer/CodePocket/releases/latest) 下载到 `~/.codepocket/bin/`。手动安装方式见 [connector/README.md](connector/README.md#安装-hub)。
+
+### 3. 启动
 
 ```bash
 codepocket
@@ -35,14 +47,14 @@ codepocket
 # 首次带 Key 启动
 codepocket --key YOUR_KEY
 
-# 自定义 Relay 地址
-codepocket --relay wss://example.com/ws
+# 自定义 Relay 地址（指向你自部署的 Relay）
+codepocket --relay wss://your-domain.com/ws --key YOUR_KEY
 
 # 短命令
 cpkt
 ```
 
-### 3. Daemon 模式
+### 4. Daemon 模式
 
 后台常驻运行，关闭终端不中断：
 
@@ -64,21 +76,57 @@ codepocket status             # 查看运行状态
 |---|---|
 | `RELAY_WS_URL` | Relay 服务器 WebSocket 地址 |
 | `CPKT_HUB_URL` | Hub 服务地址（默认 `http://127.0.0.1:3006`） |
+| `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` | 代理地址（公司网络环境下使用） |
+
+## 自部署 Relay
+
+默认情况下小程序连接作者托管的 Relay 服务。如果你希望自己部署一份（数据完全自有），仓库提供了部署脚本。
+
+### 一键部署 (Nginx + systemd)
+
+在你的服务器上：
+
+```bash
+git clone https://github.com/TinaSummer/CodePocket.git
+cd CodePocket
+bash deploy-relay.sh --domain relay.your-domain.com
+```
+
+脚本会自动完成：
+- 安装 Nginx + Bun + certbot (Let's Encrypt)
+- 创建隔离的系统用户 (`codepocket-relay`，无 shell)
+- 配置 systemd 服务（沙箱模式）
+- 申请 SSL 证书并配置 WSS 反向代理
+- 添加 WebSocket / API 限流规则
+
+部署完成后会输出自动生成的 `RELAY_KEY`。然后在微信小程序的 **设置 → Relay 地址** 中填入 `wss://relay.your-domain.com/ws`，启动 CLI 时也带上：
+
+```bash
+codepocket --relay wss://relay.your-domain.com/ws --key YOUR_RELAY_KEY
+```
+
+### 其他部署方式
+
+- 宝塔面板:参考 [docs/deploy-baota.md](docs/deploy-baota.md)
+- Docker / Caddy:参考 [docker-compose.yml](docker-compose.yml) 和 [Caddyfile](Caddyfile)
 
 ## 项目结构
 
 ```
-codepocket/
+CodePocket/
 ├── connector/        # npm CLI 包 (@tina_summer/codepocket)
-│   ├── bin/          # CLI 入口
-│   ├── src/          # MCP server、connector 逻辑
-│   └── vendor/       # Hub 二进制
-├── miniprogram/      # 微信小程序
+│   ├── bin/          # CLI 入口 (codepocket.js)
+│   └── src/          # MCP server、connector 逻辑
+├── miniprogram/      # 微信小程序客户端 (已上架，可用测试号本地调试)
 ├── relay/            # Relay 中继服务器 (Bun + Hono)
-├── proxy/            # 代理服务
-├── scripts/          # 部署/管理脚本
-└── docs/             # 部署文档
+├── proxy/            # SSE→WebSocket 代理
+├── docs/             # 部署文档 (deploy-baota.md 等)
+├── deploy-relay.sh   # Relay 一键部署脚本
+├── docker-compose.yml # Docker 部署
+└── Caddyfile         # Caddy 反代配置
 ```
+
+> Hub 二进制 (`cpkt-hub`) 通过 GitHub Releases 分发，不在仓库内。运行 `codepocket install-hub` 自动下载。
 
 ### 小程序页面
 
@@ -112,7 +160,7 @@ Relay 是纯转发中间人，负责路由消息。CLI 和小程序通过 Relay 
 ### 小程序开发
 
 1. 安装 [微信开发者工具](https://developers.weixin.qq.com/miniprogram/dev/devtools/download.html)
-2. 导入 `codepocket/` 目录
+2. 导入 `CodePocket/` 目录
 3. 复制 `miniprogram/utils/config.js` 为 `miniprogram/utils/config.local.js`，填入你的 Relay 地址
 4. AppID 使用 `测试号` 或在 `project.config.json` 中填入你自己的
 
@@ -127,3 +175,7 @@ node bin/codepocket.js --key YOUR_KEY
 ## License
 
 MIT
+
+## 致谢
+
+- [linux.do](https://linux.do) — 感谢社区提供的交流平台与成员们的反馈建议，让这个项目在实际使用场景中不断打磨完善。

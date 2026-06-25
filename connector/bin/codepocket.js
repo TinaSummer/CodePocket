@@ -14,8 +14,42 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const readline = require('readline')
+const { HttpsProxyAgent } = require('https-proxy-agent')
 const { startMcpServer, handlePhoneActionResponse: onPhoneActionResponse } = require('../src/mcp-server')
 const { runTestCli } = require('../src/mcp-client')
+
+// ── Proxy detection ──
+
+/**
+ * Detect proxy URL from standard environment variables.
+ * Returns the proxy URL string or null if no proxy is configured.
+ */
+function detectProxyUrl() {
+  return (
+    process.env.HTTPS_PROXY ||
+    process.env.https_proxy ||
+    process.env.HTTP_PROXY ||
+    process.env.http_proxy ||
+    process.env.ALL_PROXY ||
+    process.env.all_proxy ||
+    null
+  )
+}
+
+/**
+ * Create a proxy agent if a proxy is configured, otherwise return undefined.
+ * Used for both fetch() and WebSocket connections.
+ */
+function createProxyAgent() {
+  const proxyUrl = detectProxyUrl()
+  if (!proxyUrl) return undefined
+  try {
+    return new HttpsProxyAgent(proxyUrl)
+  } catch (err) {
+    log(`[codepocket] ⚠ 代理配置无效: ${err.message}`)
+    return undefined
+  }
+}
 
 // ── Config ──
 
@@ -98,17 +132,67 @@ function findHubBin() {
   const platformBin = path.join(__dirname, '..', 'node_modules', `@tina_summer`, `codepocket-${platformTag}`, 'bin', platformBinName)
   if (fs.existsSync(platformBin)) return platformBin
 
-  // 2. Bundled vendor binary
-  const vendorBinName = process.platform === 'win32' ? 'cpkt-hub.exe' : 'cpkt-hub'
+  // 2. Bundled vendor binary (dev mode)
+  const vendorBinName = process.platform === 'win32' ? 'cpkt-hub.exe'
+                    : process.platform === 'linux' ? 'cpkt-hub-linux'
+                    : 'cpkt-hub'
   const bundledBin = path.join(__dirname, '..', 'vendor', vendorBinName)
   if (fs.existsSync(bundledBin)) return bundledBin
 
-  // 3. System PATH
-  const cmd = process.platform === 'win32' ? 'where codepocket' : 'which codepocket 2>/dev/null'
+  // 3. User-installed binary via `codepocket install-hub`
+  const userBinName = process.platform === 'win32' ? 'cpkt-hub.exe' : 'cpkt-hub'
+  const userBin = path.join(CONFIG_DIR, 'bin', userBinName)
+  if (fs.existsSync(userBin)) return userBin
+
+  // 4. System PATH
+  const cmd = process.platform === 'win32' ? 'where cpkt-hub' : 'which cpkt-hub 2>/dev/null'
   try { const r = execSync(cmd).toString().trim().split(/\r?\n/)[0]; if (r) return r } catch {}
-  const cmd2 = process.platform === 'win32' ? 'where cpkt-hub' : 'which cpkt-hub 2>/dev/null'
-  try { const r = execSync(cmd2).toString().trim().split(/\r?\n/)[0]; if (r) return r } catch {}
   return null
+}
+
+// ── install-hub subcommand ──
+
+async function installHub() {
+  const platformKey = `${process.platform}-${process.arch}`
+  const assetName = process.platform === 'win32'
+    ? `cpkt-hub-${platformKey}.exe`
+    : `cpkt-hub-${platformKey}`
+  const url = `https://github.com/TinaSummer/CodePocket/releases/latest/download/${assetName}`
+
+  const binDir = path.join(CONFIG_DIR, 'bin')
+  fs.mkdirSync(binDir, { recursive: true })
+  const destName = process.platform === 'win32' ? 'cpkt-hub.exe' : 'cpkt-hub'
+  const destPath = path.join(binDir, destName)
+
+  console.log(`[codepocket] 正在下载 Hub 二进制 (${platformKey})...`)
+  console.log(`[codepocket] URL: ${url}`)
+
+  // Use curl for proxy compatibility (HTTPS_PROXY env var)
+  const proxy = detectProxyUrl()
+  const curlArgs = ['-L', '--fail', '-o', destPath]
+  if (proxy) curlArgs.push('--proxy', proxy)
+  curlArgs.push(url)
+  try {
+    execSync(`curl ${curlArgs.map(a => `'${a}'`).join(' ')}`, { stdio: 'inherit' })
+  } catch (err) {
+    console.error(`[codepocket] ✗ 下载失败`)
+    console.error(`[codepocket] 手动下载: ${url}`)
+    console.error(`[codepocket] 放到 ${destPath} 或 PATH 中的任意位置`)
+    try { fs.unlinkSync(destPath) } catch {}
+    process.exit(1)
+  }
+
+  if (process.platform !== 'win32') {
+    fs.chmodSync(destPath, 0o755)
+  }
+  console.log(``)
+  console.log(`[codepocket] ✓ 已安装到 ${destPath}`)
+  console.log(`[codepocket] 现在可以运行: codepocket`)
+}
+
+if (args[0] === 'install-hub') {
+  installHub()
+  return
 }
 
 async function isHubRunning(hubUrl) {
@@ -269,6 +353,7 @@ let jwt = ''
 let relayWs = null
 let relayPingInterval = null
 let hubBin = findHubBin()
+let relayConnectFailures = 0
 
 // ── Logging: write to log file when running with Claude Code foreground ──
 
@@ -403,9 +488,17 @@ function connectRelay() {
   if (relayPingInterval) { clearInterval(relayPingInterval); relayPingInterval = null }
   if (relayWs) { try { relayWs.removeAllListeners() } catch {} try { relayWs.close() } catch {} relayWs = null }
 
-  relayWs = new WebSocket(relayUrl)
+  // Detect proxy from env vars (HTTPS_PROXY / HTTP_PROXY / ALL_PROXY)
+  const proxyAgent = createProxyAgent()
+  if (proxyAgent) {
+    log(`[codepocket] 使用代理: ${detectProxyUrl()}`)
+  }
+  const wsOptions = proxyAgent ? { agent: proxyAgent } : {}
+
+  relayWs = new WebSocket(relayUrl, wsOptions)
 
   relayWs.on('open', () => {
+    relayConnectFailures = 0
     relayWs.send(JSON.stringify({
       type: 'register',
       key: relayKey,
@@ -476,6 +569,20 @@ function connectRelay() {
   relayWs.on('close', () => {
     if (relayPingInterval) { clearInterval(relayPingInterval); relayPingInterval = null }
     relayWs = null
+    relayConnectFailures++
+    // After 3 consecutive failures, show network troubleshooting hint
+    if (relayConnectFailures === 3) {
+      log(`[codepocket] ⚠ 连续 ${relayConnectFailures} 次连接 Relay 失败`)
+      if (proxyAgent) {
+        log(`[codepocket]   已使用代理 ${detectProxyUrl()} 但仍无法连接`)
+        log(`[codepocket]   检查代理端口是否正确、代理是否支持 WebSocket`)
+      } else {
+        log(`[codepocket]   可能是网络限制拦截了 WebSocket 连接`)
+        log(`[codepocket]   方案 1: 手机开热点, 电脑连热点重试`)
+        log(`[codepocket]   方案 2: 设环境变量 HTTPS_PROXY=http://127.0.0.1:端口号 走代理`)
+        log(`[codepocket]   方案 3: 联系 IT 开白名单`)
+      }
+    }
     setTimeout(connectRelay, 3000)
   })
   relayWs.on('error', () => { relayWs?.close() })

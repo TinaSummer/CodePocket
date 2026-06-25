@@ -1,6 +1,6 @@
 {
   "name": "@tina_summer/codepocket",
-  "version": "2.4.0",
+  "version": "2.5.2",
   "description": "CodePocket — 基于ClaudeCode的微信小程序工作台",
   "bin": {
     "codepocket": "bin/codepocket.js",
@@ -15,6 +15,7 @@
     "start": "node bin/codepocket.js"
   },
   "dependencies": {
+    "https-proxy-agent": "^7.0.0",
     "qrcode-terminal": "^0.12.0",
     "ws": "^8.18.0"
   },

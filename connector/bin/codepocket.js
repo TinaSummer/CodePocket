@@ -190,6 +190,10 @@ async function installHub() {
   console.log(`[codepocket] 现在可以运行: codepocket`)
 }
 
+// ── Parse args ──
+
+const args = process.argv.slice(2)
+
 if (args[0] === 'install-hub') {
   installHub()
   return
@@ -204,10 +208,6 @@ async function isHubRunning(hubUrl) {
     return res.status > 0 // Any HTTP response means hub is up
   } catch { return false }
 }
-
-// ── Parse args ──
-
-const args = process.argv.slice(2)
 
 // 'test' subcommand — standalone
 if (args[0] === 'test') {

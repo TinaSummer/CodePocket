@@ -221,18 +221,32 @@ app.post('/register/admin/check', async (c) => {
   // Openid path: wx.login code present → resolve openid → upgrade key if admin
   if (body.code && WX_APPID && WX_SECRET) {
     const openId = await getOpenId(String(body.code))
-    if (openId && ADMIN_OPENIDS.includes(openId)) {
-      // Promote the caller's existing key to admin status
-      const keys = loadKeys()
-      const owner = key ? keys.find(k => timingSafeEqual(k.key, key) && !k.revoked) : null
+    if (openId) {
+      // Backfill openId on the caller's key if missing (covers keys registered before WX_APPID was set)
+      if (key) {
+        const keys = loadKeys()
+        const owner = keys.find(k => timingSafeEqual(k.key, key) && !k.revoked)
+        if (owner && !owner.openId) {
+          owner.openId = openId
+          saveKeys(keys)
+          console.log(`[admin/check] backfilled openId on key "${owner.name}"`)
+        }
+      }
+      if (ADMIN_OPENIDS.includes(openId)) {
+        // Promote the caller's existing key to admin status
+        const keys = loadKeys()
+        const owner = key ? keys.find(k => timingSafeEqual(k.key, key) && !k.revoked) : null
         if (owner && !owner.admin) {
           owner.admin = true
           saveKeys(keys)
           console.log(`[admin/check] upgraded key "${owner.name}" to admin via openid`)
         }
-      return c.json({ isAdmin: true })
+        return c.json({ isAdmin: true })
+      }
+      // openid resolved but not in whitelist — log so operator can discover their openid
+      console.log(`[admin/check] openid=${openId} not in ADMIN_OPENIDS (add to env to grant admin)`)
     }
-    // openid present but not in whitelist — fall through to key check (for legacy ADMIN_KEY paste)
+    // fall through to legacy ADMIN_KEY check
   }
 
   return c.json({ isAdmin: isAdminKey(key) })

@@ -18,7 +18,7 @@ DOMAIN="${DOMAIN:-your-domain.com}"
 RELAY_PORT=3010
 INSTALL_DIR="/opt/codepocket-relay"
 REPO_DIR="/opt/codemind"
-REPO_URL="https://github.com/TinaSummer/codepocket.git"
+REPO_URL="https://github.com/TinaSummer/CodePocket.git"
 GIT_BRANCH="main"
 SERVICE_NAME="codepocket-relay"
 

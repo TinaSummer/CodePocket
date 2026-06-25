@@ -12,7 +12,7 @@ set -euo pipefail
 
 INSTALL_DIR="/opt/codepocket-relay"
 REPO_DIR="/root/codepocket"
-REPO_URL="https://github.com/TinaSummer/codepocket.git"
+REPO_URL="https://github.com/TinaSummer/CodePocket.git"
 
 echo "╔══════════════════════════════════════╗"
 echo "║  CodePocket Relay 更新                 ║"

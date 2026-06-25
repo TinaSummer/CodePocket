@@ -23,6 +23,14 @@ module.exports.formatDate = formatDate
       <text class="settings-label">已连接 Hub</text>
       <text class="settings-value muted">Claude Code</text>
     </view>
+    <view class="settings-row" bindtap="onShowRelayConfig">
+      <view class="settings-icon" style="background:rgba(102,126,234,0.08);">
+        <image class="si-img" src="/assets/icons/info-gray.png" mode="aspectFit"/>
+      </view>
+      <text class="settings-label">Relay 地址</text>
+      <text class="settings-value muted">{{relayUrlDisplay || '默认'}}</text>
+      <image class="settings-chevron" src="/assets/icons/chevron-right-light.png" mode="aspectFit"/>
+    </view>
     <view class="settings-row" bindtap="onReconnect">
       <view class="settings-icon purple">
         <image class="si-img" src="/assets/icons/reconnect-purple.png" mode="aspectFit"/>
@@ -309,7 +317,7 @@ module.exports.formatDate = formatDate
         </view>
         <view class="ts-section">
           <text class="ts-section-title">开源</text>
-          <text class="ts-hint" bindtap="onCopyGithub" style="color:#667eea;">github.com/TinaSummer/codepocket-cli（点击复制链接）</text>
+          <text class="ts-hint" bindtap="onCopyGithub" style="color:#667eea;">github.com/TinaSummer/CodePocket（点击复制链接）</text>
         </view>
         <view class="ts-section" style="text-align:center; padding-top: 8rpx;">
           <button class="contact-btn-sm" open-type="contact">有问题？联系客服</button>

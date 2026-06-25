@@ -30,6 +30,7 @@ Page({
     keyList: [],
     keyListLoading: false,
     showGuide: false,
+    relayUrlDisplay: '',
   },
 
   onShow() {
@@ -37,6 +38,55 @@ Page({
     this._loadWallpaperName()
     this._loadPersona()
     this._checkAdmin()
+    this._loadRelayUrlDisplay()
+  },
+
+  _loadRelayUrlDisplay() {
+    const custom = wx.getStorageSync('custom_relay_url')
+    if (custom) {
+      // Truncate long URLs for display
+      const display = custom.length > 24 ? custom.slice(0, 22) + '...' : custom
+      this.setData({ relayUrlDisplay: display })
+    } else {
+      this.setData({ relayUrlDisplay: '' })
+    }
+  },
+
+  onShowRelayConfig() {
+    const current = wx.getStorageSync('custom_relay_url') || ''
+    wx.showModal({
+      title: 'Relay 地址',
+      editable: true,
+      content: current,
+      placeholderText: 'wss://your-domain.com/ws',
+      confirmText: '保存',
+      cancelText: '取消',
+      success: (res) => {
+        if (!res.confirm) return
+        const url = (res.content || '').trim()
+        if (!url) {
+          wx.removeStorageSync('custom_relay_url')
+          this._loadRelayUrlDisplay()
+          wx.showToast({ title: '已恢复默认地址', icon: 'none' })
+          return
+        }
+        if (!/^wss?:\/\/.+/.test(url)) {
+          wx.showToast({ title: '必须以 wss:// 或 ws:// 开头', icon: 'none' })
+          return
+        }
+        wx.setStorageSync('custom_relay_url', url)
+        this._loadRelayUrlDisplay()
+        wx.showModal({
+          title: '已保存',
+          content: '需要重新配对才能生效,现在去配对吗?',
+          confirmText: '去配对',
+          cancelText: '稍后',
+          success: (r) => {
+            if (r.confirm) this.onReconnect()
+          },
+        })
+      },
+    })
   },
 
   _checkAdmin() {
@@ -284,7 +334,7 @@ Page({
 
   onCopyGithub() {
     wx.setClipboardData({
-      data: 'https://github.com/TinaSummer/codepocket-cli',
+      data: 'https://github.com/TinaSummer/CodePocket',
       success: () => wx.showToast({ title: '已复制链接', icon: 'success' }),
     })
   },

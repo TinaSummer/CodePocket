@@ -29,11 +29,16 @@ try { localConfig = require('./config.local') } catch {}
 const RELAY_URL = localConfig.relayUrl || defaultConfig.relayUrl
 
 function getRelayUrl() {
+  // Priority: user-saved (wx.storage) > build-time config
+  try {
+    const saved = wx.getStorageSync('custom_relay_url')
+    if (saved) return saved
+  } catch {}
   return RELAY_URL
 }
 
 function getHttpUrl() {
-  return RELAY_URL.replace('/ws', '').replace('wss://', 'https://').replace('ws://', 'http://')
+  return getRelayUrl().replace('/ws', '').replace('wss://', 'https://').replace('ws://', 'http://')
 }
 
 function connect(onEvent, onConnected) {

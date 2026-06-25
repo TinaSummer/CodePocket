@@ -129,7 +129,7 @@ Page({
 
   onCopyGithub() {
     wx.setClipboardData({
-      data: 'https://github.com/TinaSummer/codepocket-cli',
+      data: 'https://github.com/TinaSummer/CodePocket',
       success: () => wx.showToast({ title: '已复制链接', icon: 'success' }),
     })
   },

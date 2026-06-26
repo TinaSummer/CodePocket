@@ -155,8 +155,10 @@ function findHubBin() {
 async function installHub() {
   const platformKey = `${process.platform}-${process.arch}`
   const assetName = process.platform === 'win32'
-    ? `cpkt-hub-${platformKey}.exe`
-    : `cpkt-hub-${platformKey}`
+    ? 'cpkt-hub.exe'
+    : process.platform === 'linux'
+    ? 'cpkt-hub-linux'
+    : 'cpkt-hub'
   const url = `https://github.com/TinaSummer/CodePocket/releases/latest/download/${assetName}`
 
   const binDir = path.join(CONFIG_DIR, 'bin')

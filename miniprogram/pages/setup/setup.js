@@ -29,6 +29,23 @@ Page({
     this.tryConnect(this.data.key)
   },
 
+  onResetKey() {
+    wx.showModal({
+      title: '重置 Key',
+      content: '将清除本地 Key 并向 Relay 申请新 Key，继续？',
+      confirmText: '重置',
+      cancelText: '取消',
+      confirmColor: '#eb5757',
+      success: (res) => {
+        if (!res.confirm) return
+        wx.removeStorageSync('relay_key')
+        wx.removeStorageSync('client_token')
+        wx.removeStorageSync('session_token')
+        this.register()
+      },
+    })
+  },
+
   async register() {
     this.setData({ step: 'loading' })
     try {

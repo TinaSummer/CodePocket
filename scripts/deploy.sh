@@ -88,21 +88,28 @@ show_logs() {
 # ========== 代码 ==========
 
 pull_code() {
-  # 已存在本地代码（手动复制），跳过网络操作
-  if [[ -f "$REPO_DIR/relay/src/index.js" ]]; then
-    log_info "检测到本地代码 $REPO_DIR/relay/src/index.js，跳过拉取"
-    return 0
-  fi
+  # git 仓库 → 优先 git pull（失败时跳过，使用现有代码继续）
   if [[ -d "$REPO_DIR/.git" ]]; then
     cd "$REPO_DIR"
-    log_info "拉取最新代码..."
-    git fetch origin
-    git reset --hard "origin/$GIT_BRANCH"
-  else
-    rm -rf "$REPO_DIR"
-    log_info "克隆仓库: $REPO_URL"
-    git clone -b "$GIT_BRANCH" "$REPO_URL" "$REPO_DIR"
+    log_info "拉取最新代码 (origin/$GIT_BRANCH)..."
+    if git fetch origin && git reset --hard "origin/$GIT_BRANCH"; then
+      log_info "代码已更新到最新"
+    else
+      log_warn "git 拉取失败（网络问题？），跳过拉取，使用 $REPO_DIR 现有代码"
+    fi
+    return 0
   fi
+
+  # 非 git 仓库但已有本地代码（手动复制） → 跳过拉取
+  if [[ -f "$REPO_DIR/relay/src/index.js" ]]; then
+    log_warn "$REPO_DIR 不是 git 仓库，跳过拉取，使用现有代码"
+    return 0
+  fi
+
+  # 全新部署 → git clone
+  rm -rf "$REPO_DIR"
+  log_info "克隆仓库: $REPO_URL"
+  git clone -b "$GIT_BRANCH" "$REPO_URL" "$REPO_DIR"
 }
 
 copy_relay() {

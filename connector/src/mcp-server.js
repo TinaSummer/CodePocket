@@ -177,10 +177,7 @@ function startMcpServer(relaySender) {
 
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
-      // CORS headers
-      res.setHeader('Access-Control-Allow-Origin', '*')
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      // No CORS headers — MCP server is local-only (127.0.0.1), Claude Code doesn't need CORS
       if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
 
       if (req.url === '/sse' && req.method === 'GET') {

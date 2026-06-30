@@ -17,3 +17,4 @@ miniprogram/project.private.config.json
 connector/bun.lock
 miniprogram/utils/config.local.js
 *.key
+.publish-cache/

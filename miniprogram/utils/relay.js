@@ -581,11 +581,12 @@ module.exports = {
   // Upload share data to COS via relay server
   async uploadShare(data) {
     const httpUrl = RELAY_URL.replace('/ws', '').replace('wss://', 'https://').replace('ws://', 'http://')
+    const key = wx.getStorageSync('relay_key') || ''
     return new Promise((resolve, reject) => {
       wx.request({
         url: `${httpUrl}/share`,
         method: 'POST',
-        data,
+        data: { ...data, key },
         success: (res) => {
           if (res.statusCode === 200 && res.data.id) resolve(res.data)
           else reject(new Error(res.data?.error || 'upload failed'))

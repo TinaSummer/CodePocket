@@ -84,8 +84,8 @@ function loadKeys() {
 }
 
 function saveKeys(keys) {
-  fs.mkdirSync(DATA_DIR, { recursive: true })
-  fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2))
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 })
+  fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2), { mode: 0o600 })
   _keysCache = keys
   _keysCacheTime = Date.now()
 }
@@ -316,6 +316,11 @@ app.post('/share', async (c) => {
   if (!body || !body.name || !body.messages) {
     return c.json({ error: 'missing name or messages' }, 400)
   }
+  // Require a valid relay key to prevent anonymous COS abuse
+  if (!body.key || !isValidKey(body.key)) {
+    return c.json({ error: 'Invalid key' }, 403)
+  }
+  delete body.key
   if (!Array.isArray(body.messages) || body.messages.length > 500) {
     return c.json({ error: 'messages must be an array with at most 500 items' }, 400)
   }
@@ -369,8 +374,7 @@ app.get('/share/:id', async (c) => {
 app.get('/', (c) => c.json({
   name: 'codepocket-relay',
   version: '2.0.0',
-  connections: { hubs: hubs.size, clients: clients.size },
-  keys: loadKeys().filter(k => !k.revoked).length,
+  ok: true,
 }))
 
 // ── Public Registration ──
@@ -716,6 +720,6 @@ app.get('/ws', upgradeWebSocket(() => ({
 
 const server = serve({ fetch: app.fetch, port: RELAY_PORT, hostname: '127.0.0.1' }, (info) => {
   console.log(`[relay] listening on 127.0.0.1:${info.port}`)
-  console.log(`[relay] admin: ${ADMIN_KEY.slice(0, 8)}...`)
+  console.log('[relay] admin key configured')
 })
 injectWebSocket(server)

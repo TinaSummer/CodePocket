@@ -14,6 +14,8 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const readline = require('readline')
+const crypto = require('crypto')
+const nacl = require('tweetnacl')
 const { HttpsProxyAgent } = require('https-proxy-agent')
 const { startMcpServer, handlePhoneActionResponse: onPhoneActionResponse } = require('../src/mcp-server')
 const { runTestCli } = require('../src/mcp-client')
@@ -126,11 +128,18 @@ function findClaudeSessionFile(directory) {
 }
 
 function findHubBin() {
-  // 1. Platform-specific npm package (e.g. @tina_summer/codepocket-win32-x64)
+  // 1. Platform-specific npm package via optionalDependencies
+  //    npm hoists optionalDeps to top-level node_modules alongside the main package,
+  //    so the sibling path covers both global and local installs.
   const platformTag = `${process.platform}-${process.arch}`
   const platformBinName = process.platform === 'win32' ? 'codepocket.exe' : 'codepocket'
-  const platformBin = path.join(__dirname, '..', 'node_modules', `@tina_summer`, `codepocket-${platformTag}`, 'bin', platformBinName)
-  if (fs.existsSync(platformBin)) return platformBin
+  const platformCandidates = [
+    path.join(__dirname, '..', '..', `codepocket-${platformTag}`, 'bin', platformBinName),
+    path.join(__dirname, '..', 'node_modules', '@tina_summer', `codepocket-${platformTag}`, 'bin', platformBinName),
+  ]
+  for (const p of platformCandidates) {
+    if (fs.existsSync(p)) return p
+  }
 
   // 2. Bundled vendor binary (dev mode)
   const vendorBinName = process.platform === 'win32' ? 'cpkt-hub.exe'
@@ -165,6 +174,12 @@ async function installHub() {
   fs.mkdirSync(binDir, { recursive: true })
   const destName = process.platform === 'win32' ? 'cpkt-hub.exe' : 'cpkt-hub'
   const destPath = path.join(binDir, destName)
+
+  // Skip download if already installed (idempotent for re-runs)
+  if (fs.existsSync(destPath)) {
+    console.log(`[codepocket] ✓ Hub 已安装: ${destPath}`)
+    return
+  }
 
   console.log(`[codepocket] 正在下载 Hub 二进制 (${platformKey})...`)
   console.log(`[codepocket] URL: ${url}`)
@@ -241,13 +256,42 @@ function checkRunning() {
 if (args[0] === 'stop') {
   const pid = checkRunning()
   if (!pid) {
-    console.log('[codepocket] Not running')
+    // Even with no recorded daemon PID, clean up orphaned hub/runner from prior runs
+    const orphans = killOrphans()
+    console.log(orphans
+      ? `[codepocket] 清理残留进程: ${orphans}`
+      : '[codepocket] Not running')
     process.exit(0)
   }
-  try { process.kill(pid, process.platform === 'win32' ? 'SIGKILL' : 'SIGTERM') } catch {}
+  const sig = process.platform === 'win32' ? 'SIGKILL' : 'SIGTERM'
+  // Kill the whole process group (daemon is a group leader via detached:true,
+  // so -pid kills daemon + hub + runner together)
+  try { process.kill(-pid, sig) } catch {}
+  // Fallback: kill just the daemon if group kill failed
+  try { process.kill(pid, sig) } catch {}
   try { fs.unlinkSync(PID_FILE) } catch {}
-  console.log(`[codepocket] Stopped (PID ${pid})`)
-  process.exit(0)
+  // Wait briefly, then sweep up any orphans that escaped the group kill
+  setTimeout(() => {
+    const orphans = killOrphans()
+    const extra = orphans ? `，清理残留: ${orphans}` : ''
+    console.log(`[codepocket] Stopped (PID ${pid})${extra}`)
+    process.exit(0)
+  }, 300)
+}
+
+// Kill orphaned hub/runner processes by binary name (cross-platform).
+// The hub binary (cpkt-hub) also runs the runner/sync modes, so matching the
+// binary name catches every mode it was spawned in.
+function killOrphans() {
+  try {
+    if (process.platform === 'win32') {
+      execSync('taskkill /F /IM cpkt-hub.exe /T', { stdio: 'ignore' })
+    } else {
+      execSync('pkill -f cpkt-hub', { stdio: 'ignore' })
+    }
+    return 'hub'
+  } catch {}
+  return ''
 }
 
 // 'logs' subcommand
@@ -476,6 +520,101 @@ async function startSSE() {
   } catch { setTimeout(startSSE, 5000) }
 }
 
+// ── End-to-end encryption (X25519 + XSalsa20-Poly1305) ──
+// The relay only forwards e2ePubKey + opaque `enc` envelopes; it cannot decrypt.
+// Nonces are counter-based with a direction tag to avoid reuse across directions
+// under the same shared key: connector uses 0xFF prefix, phone uses 0x00.
+
+let e2eKeypair = null        // { publicKey, secretKey } Uint8Arrays (X25519)
+let e2eSharedKey = null      // Uint8Array(32), set when peer pubkey arrives
+let e2eNonceCounter = 0
+
+function ensureE2EKeypair() {
+  if (e2eKeypair) return e2eKeypair
+  // Node has crypto.randomBytes — nacl.box.keyPair auto-detects it
+  e2eKeypair = nacl.box.keyPair()
+  return e2eKeypair
+}
+
+function getE2EPubKeyB64() {
+  return Buffer.from(ensureE2EKeypair().publicKey).toString('base64')
+}
+
+function setPeerE2EPubKey(peerPubKeyB64) {
+  if (!peerPubKeyB64 || typeof peerPubKeyB64 !== 'string') return
+  try {
+    const peerPub = Buffer.from(peerPubKeyB64, 'base64')
+    if (peerPub.length !== 32) return
+    e2eSharedKey = nacl.box.before(peerPub, ensureE2EKeypair().secretKey)
+    e2eNonceCounter = 0
+    log('[codepocket] ✓ E2E 加密通道已建立')
+  } catch (e) {
+    log(`[codepocket] E2E 密钥协商失败: ${e.message}`)
+  }
+}
+
+function nextNonce() {
+  e2eNonceCounter++
+  const n = new Uint8Array(24)
+  n[0] = 0xFF  // connector→phone direction tag
+  let c = e2eNonceCounter
+  for (let i = 6; i >= 1; i--) { n[i] = c & 0xff; c = Math.floor(c / 256) }
+  return n
+}
+
+function e2eEncrypt(obj) {
+  if (!e2eSharedKey) return undefined
+  try {
+    const msgBytes = Buffer.from(JSON.stringify(obj), 'utf8')
+    const nonce = nextNonce()
+    const cipher = nacl.secretbox(msgBytes, nonce, e2eSharedKey)
+    if (!cipher) return undefined
+    return { n: Buffer.from(nonce).toString('base64'), c: Buffer.from(cipher).toString('base64') }
+  } catch { return undefined }
+}
+
+function e2eDecrypt(envelope) {
+  if (!envelope || typeof envelope !== 'object') return undefined
+  if (typeof envelope.n !== 'string' || typeof envelope.c !== 'string') return undefined
+  if (!e2eSharedKey) return undefined
+  try {
+    const nonce = new Uint8Array(Buffer.from(envelope.n, 'base64'))
+    const cipher = new Uint8Array(Buffer.from(envelope.c, 'base64'))
+    const plain = nacl.secretbox.open(cipher, nonce, e2eSharedKey)
+    if (!plain) return undefined
+    return JSON.parse(Buffer.from(plain).toString('utf8'))
+  } catch { return undefined }
+}
+
+// Pack a message for sending: moves sensitive fields into an `enc` envelope.
+// Routing fields (type, requestId, actionId, success, status, ok) stay plaintext.
+function encryptMessage(msg) {
+  if (!e2eSharedKey) return msg
+  const routing = ['type', 'requestId', 'actionId', 'success', 'status', 'ok', 'reconnected']
+  const content = {}
+  for (const [k, v] of Object.entries(msg)) {
+    if (!routing.includes(k)) content[k] = v
+  }
+  if (Object.keys(content).length === 0) return msg
+  const enc = e2eEncrypt(content)
+  if (!enc) return msg
+  const out = { type: msg.type }
+  for (const k of routing) if (k in msg) out[k] = msg[k]
+  out.enc = enc
+  return out
+}
+
+// Unpack a received message: merges decrypted content back from `enc`.
+function decryptMessage(msg) {
+  if (!msg || !msg.enc || !e2eSharedKey) return msg
+  const content = e2eDecrypt(msg.enc)
+  if (content) {
+    delete msg.enc
+    Object.assign(msg, content)
+  }
+  return msg
+}
+
 // ── Relay ──
 
 function connectRelay() {
@@ -505,6 +644,7 @@ function connectRelay() {
       type: 'register',
       key: relayKey,
       sessionToken: savedSession?.sessionToken || undefined,
+      e2ePubKey: getE2EPubKeyB64(),
     }))
     relayPingInterval = setInterval(() => {
       if (relayWs?.readyState === WebSocket.OPEN) {
@@ -516,6 +656,7 @@ function connectRelay() {
   relayWs.on('message', (raw) => {
     let msg
     try { msg = JSON.parse(raw.toString()) } catch { return }
+    msg = decryptMessage(msg)
     switch (msg.type) {
       case 'registered': {
         try {
@@ -530,6 +671,7 @@ function connectRelay() {
         break
       }
       case 'client-connected': {
+        if (msg.clientE2EPubKey) setPeerE2EPubKey(msg.clientE2EPubKey)
         log('[codepocket] ✓ 小程序已连接')
         break
       }
@@ -591,7 +733,7 @@ function connectRelay() {
 }
 
 function sendToRelay(msg) {
-  if (relayWs?.readyState === WebSocket.OPEN) relayWs.send(JSON.stringify(msg))
+  if (relayWs?.readyState === WebSocket.OPEN) relayWs.send(JSON.stringify(encryptMessage(msg)))
 }
 
 function sendSpawnResult(requestId, sessionId, error) {
@@ -600,12 +742,12 @@ function sendSpawnResult(requestId, sessionId, error) {
     : { type: 'spawn-session-result', requestId, success: true, sessionId }
   // Retry sending if relay connection is temporarily down
   if (relayWs?.readyState === WebSocket.OPEN) {
-    relayWs.send(JSON.stringify(msg))
+    relayWs.send(JSON.stringify(encryptMessage(msg)))
   } else {
     log(`[codepocket] Relay not open, retrying spawn result in 2s...`)
     setTimeout(() => {
       if (relayWs?.readyState === WebSocket.OPEN) {
-        relayWs.send(JSON.stringify(msg))
+        relayWs.send(JSON.stringify(encryptMessage(msg)))
       } else {
         log(`[codepocket] Failed to send spawn result, relay still down`)
       }

@@ -146,6 +146,10 @@ function getHub(ws) {
   return hubs.get(s.hubToken) || null
 }
 
+function getE2EPubKey(ws) {
+  return connState.get(ws)?.e2ePubKey || ''
+}
+
 function findHubByClient(ws) {
   const s = connState.get(ws)
   if (!s?.clientToken) {
@@ -385,10 +389,16 @@ app.post('/register', async (c) => {
     return c.json({ error: 'Too many registrations, try again later' }, 429)
   }
 
-  // Get open_id via WeChat code2Session
+  // Get open_id via WeChat code2Session.
+  // Hosted mode (WX_APPID/WX_SECRET configured): code is MANDATORY —
+  // blocks anonymous key farming via POST {} from bots/proxies.
+  // Self-hosted mode (no WX_APPID): allows anonymous registration for local dev.
   const body = await c.req.json().catch(() => ({}))
   let openId = ''
-  if (body.code && WX_APPID && WX_SECRET) {
+  if (WX_APPID && WX_SECRET) {
+    if (!body.code) {
+      return c.json({ error: 'WeChat code required' }, 400)
+    }
     openId = await getOpenId(body.code)
     if (!openId) {
       return c.json({ error: 'Invalid WeChat code' }, 400)
@@ -446,7 +456,7 @@ app.get('/ws', upgradeWebSocket(() => ({
     const ip = (headers['x-forwarded-for'] || '').split(',')[0].trim()
       || headers['x-real-ip']
       || 'unknown'
-    connState.set(ws, { role: null, clientToken: '', hubToken: '', ip, keyId: '' })
+    connState.set(ws, { role: null, clientToken: '', hubToken: '', ip, keyId: '', e2ePubKey: '' })
   },
 
   onMessage(event, ws) {
@@ -465,6 +475,7 @@ app.get('/ws', upgradeWebSocket(() => ({
         }
         state.role = 'hub'
         state.keyId = msg.key
+        state.e2ePubKey = msg.e2ePubKey || ''
 
         if (msg.sessionToken && hubs.has(msg.sessionToken)) {
           const e = hubs.get(msg.sessionToken)
@@ -487,7 +498,7 @@ app.get('/ws', upgradeWebSocket(() => ({
           if (client.hubToken === msg.sessionToken) {
             client.hubToken = st
             clientsForHub.add(client.ws)
-            try { client.ws.send(JSON.stringify({ type: 'paired', sessionToken: st, clientToken: client.clientToken, reconnected: true })) } catch {}
+            try { client.ws.send(JSON.stringify({ type: 'paired', sessionToken: st, clientToken: client.clientToken, reconnected: true, hubE2EPubKey: msg.e2ePubKey || '' })) } catch {}
           }
         }
         hubs.set(st, {
@@ -502,6 +513,7 @@ app.get('/ws', upgradeWebSocket(() => ({
 
       case 'pair': {
         state.role = 'client'
+        state.e2ePubKey = msg.e2ePubKey || ''
         console.log(`[relay] pair: key=${(msg.key || '').slice(0, 8)} ct=${(msg.clientToken || '').slice(0, 8)} st=${(msg.sessionToken || '').slice(0, 8)} hubs=${hubs.size}`)
         // 1. Rate limit — per real IP (set in onOpen)
         if (!checkRateLimit(state.ip)) {
@@ -516,7 +528,7 @@ app.get('/ws', upgradeWebSocket(() => ({
             const hub = hubs.get(e.hubToken)
             hub.clients.delete(e.ws); hub.clients.add(ws)
             e.ws = ws; state.clientToken = ct; state.hubToken = e.hubToken
-            ws.send(JSON.stringify({ type: 'paired', sessionToken: e.hubToken, clientToken: ct, reconnected: true }))
+            ws.send(JSON.stringify({ type: 'paired', sessionToken: e.hubToken, clientToken: ct, reconnected: true, hubE2EPubKey: getE2EPubKey(hub.ws) }))
             return
           }
           clients.delete(ct)
@@ -526,7 +538,7 @@ app.get('/ws', upgradeWebSocket(() => ({
           const hub = hubs.get(msg.sessionToken)
           clients.set(ct, { ws, hubToken: msg.sessionToken, clientToken: ct })
           hub.clients.add(ws); state.clientToken = ct; state.hubToken = msg.sessionToken
-          ws.send(JSON.stringify({ type: 'paired', sessionToken: msg.sessionToken, clientToken: ct, reconnected: true }))
+          ws.send(JSON.stringify({ type: 'paired', sessionToken: msg.sessionToken, clientToken: ct, reconnected: true, hubE2EPubKey: getE2EPubKey(hub.ws) }))
           return
         }
         // 4. Pair by key: find hub with matching keyId
@@ -539,8 +551,8 @@ app.get('/ws', upgradeWebSocket(() => ({
           if (matchedHub) {
             clients.set(ct, { ws, hubToken: matchedHub.sessionToken, clientToken: ct })
             matchedHub.clients.add(ws); state.clientToken = ct; state.hubToken = matchedHub.sessionToken
-            ws.send(JSON.stringify({ type: 'paired', sessionToken: matchedHub.sessionToken, clientToken: ct }))
-            try { matchedHub.ws.send(JSON.stringify({ type: 'client-connected' })) } catch {}
+            ws.send(JSON.stringify({ type: 'paired', sessionToken: matchedHub.sessionToken, clientToken: ct, hubE2EPubKey: getE2EPubKey(matchedHub.ws) }))
+            try { matchedHub.ws.send(JSON.stringify({ type: 'client-connected', clientE2EPubKey: state.e2ePubKey })) } catch {}
             const keys = loadKeys()
             const ki = keys.findIndex(k => k.key === pairKey)
             if (ki >= 0) { keys[ki].lastPairedAt = Date.now(); saveKeys(keys) }
@@ -565,8 +577,8 @@ app.get('/ws', upgradeWebSocket(() => ({
               clients.set(ct, { ws, hubToken: hub.sessionToken, clientToken: ct })
               hub.clients.add(ws); state.clientToken = ct; state.hubToken = hub.sessionToken
               pendingPairs.delete(token); hub.token = ''
-              ws.send(JSON.stringify({ type: 'paired', sessionToken: hub.sessionToken, clientToken: ct }))
-              try { hub.ws.send(JSON.stringify({ type: 'client-connected' })) } catch {}
+              ws.send(JSON.stringify({ type: 'paired', sessionToken: hub.sessionToken, clientToken: ct, hubE2EPubKey: getE2EPubKey(hub.ws) }))
+              try { hub.ws.send(JSON.stringify({ type: 'client-connected', clientE2EPubKey: state.e2ePubKey })) } catch {}
               break
             }
           }
@@ -584,7 +596,7 @@ app.get('/ws', upgradeWebSocket(() => ({
       case 'sse-event': {
         const hub = getHub(ws); if (!hub) return
         hub.lastSeen = Date.now()
-        const p = JSON.stringify({ type: 'sse-event', event: msg.event })
+        const p = JSON.stringify({ type: 'sse-event', event: msg.event, enc: msg.enc })
         for (const c of hub.clients) try { c.send(p) } catch {}
         break
       }
@@ -619,7 +631,7 @@ app.get('/ws', upgradeWebSocket(() => ({
         const hub = findHubByClient(ws)
         if (!hub) { ws.send(JSON.stringify({ type: 'spawn-session-result', requestId: msg.requestId, success: false, error: 'Hub offline' })); return }
         pendingSpawnRequests.set(msg.requestId, { ws, expires: Date.now() + 60000 })
-        try { hub.ws.send(JSON.stringify({ type: 'spawn-session', requestId: msg.requestId, directory: msg.directory })) } catch {
+        try { hub.ws.send(JSON.stringify({ type: 'spawn-session', requestId: msg.requestId, directory: msg.directory, enc: msg.enc })) } catch {
           pendingSpawnRequests.delete(msg.requestId)
           ws.send(JSON.stringify({ type: 'spawn-session-result', requestId: msg.requestId, success: false, error: 'Hub offline' }))
         }
@@ -636,7 +648,7 @@ app.get('/ws', upgradeWebSocket(() => ({
         const hub = findHubByClient(ws)
         if (!hub) { ws.send(JSON.stringify({ type: 'resume-session-result', requestId: msg.requestId, success: false, error: 'Hub offline' })); return }
         pendingResumeRequests.set(msg.requestId, { ws, expires: Date.now() + 60000 })
-        try { hub.ws.send(JSON.stringify({ type: 'resume-session', requestId: msg.requestId, sessionId: msg.sessionId })) } catch {
+        try { hub.ws.send(JSON.stringify({ type: 'resume-session', requestId: msg.requestId, sessionId: msg.sessionId, enc: msg.enc })) } catch {
           pendingResumeRequests.delete(msg.requestId)
           ws.send(JSON.stringify({ type: 'resume-session-result', requestId: msg.requestId, success: false, error: 'Hub offline' }))
         }
@@ -653,7 +665,7 @@ app.get('/ws', upgradeWebSocket(() => ({
         const hub = findHubByClient(ws)
         if (!hub) { ws.send(JSON.stringify({ type: 'list-dir-result', requestId: msg.requestId, error: 'Hub offline' })); return }
         pendingListDirRequests.set(msg.requestId, { ws, expires: Date.now() + 15000 })
-        try { hub.ws.send(JSON.stringify({ type: 'list-dir', requestId: msg.requestId, path: msg.path || '~' })) } catch {
+        try { hub.ws.send(JSON.stringify({ type: 'list-dir', requestId: msg.requestId, path: msg.path || '~', enc: msg.enc })) } catch {
           pendingListDirRequests.delete(msg.requestId)
           ws.send(JSON.stringify({ type: 'list-dir-result', requestId: msg.requestId, error: 'Hub offline' }))
         }
@@ -670,7 +682,7 @@ app.get('/ws', upgradeWebSocket(() => ({
         const hub = findHubByClient(ws)
         if (!hub) { ws.send(JSON.stringify({ type: 'rest-response', requestId: msg.requestId, status: 503, data: { error: 'Hub offline' } })); return }
         pendingRestRequests.set(msg.requestId, { ws, expires: Date.now() + 60000 })
-        try { hub.ws.send(JSON.stringify({ type: 'rest-request', requestId: msg.requestId, method: msg.method, path: msg.path, body: msg.body })) } catch {
+        try { hub.ws.send(JSON.stringify({ type: 'rest-request', requestId: msg.requestId, method: msg.method, path: msg.path, body: msg.body, enc: msg.enc })) } catch {
           pendingRestRequests.delete(msg.requestId)
           ws.send(JSON.stringify({ type: 'rest-response', requestId: msg.requestId, status: 503, data: { error: 'Hub offline' } }))
         }
@@ -681,7 +693,7 @@ app.get('/ws', upgradeWebSocket(() => ({
         const hub = findHubByClient(ws)
         if (!hub) { ws.send(JSON.stringify({ type: 'auth-response', requestId: msg.requestId, ok: false })); return }
         pendingAuthRequests.set(msg.requestId, { ws, expires: Date.now() + 30000 })
-        try { hub.ws.send(JSON.stringify({ type: 'auth-request', requestId: msg.requestId, accessToken: msg.accessToken })) } catch {
+        try { hub.ws.send(JSON.stringify({ type: 'auth-request', requestId: msg.requestId, accessToken: msg.accessToken, enc: msg.enc })) } catch {
           ws.send(JSON.stringify({ type: 'auth-response', requestId: msg.requestId, ok: false }))
         }
         break

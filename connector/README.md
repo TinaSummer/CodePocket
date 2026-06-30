@@ -6,7 +6,6 @@ CodePocket 的本地连接器，让你的手机通过微信小程序远程控制
 
 - 电脑已安装 [Claude Code CLI](https://claude.ai)（终端运行 `claude` 验证）
 - Node.js 18+
-- **Hub 二进制** (`cpkt-hub`) — 见下方 [安装 Hub](#安装-hub)
 
 ## 安装
 
@@ -14,36 +13,7 @@ CodePocket 的本地连接器，让你的手机通过微信小程序远程控制
 npm i -g @tina_summer/codepocket
 ```
 
-## 安装 Hub
-
-Connector 启动时需要 `cpkt-hub` 二进制（Claude Code 进程管理器）。**npm 包不含此二进制**,需要单独下载。
-
-### 自动安装 (推荐)
-
-```bash
-codepocket install-hub
-```
-
-自动检测平台、从 GitHub Releases 下载对应版本、放到 `~/.codepocket/bin/`。
-
-### 手动安装
-
-1. 前往 [Releases](https://github.com/TinaSummer/CodePocket/releases/latest) 下载对应平台:
-   - macOS: `cpkt-hub-darwin-arm64` 或 `cpkt-hub-darwin-x64`
-   - Linux: `cpkt-hub-linux-x64`
-   - Windows: `cpkt-hub-win32-x64.exe`
-2. 重命名为 `cpkt-hub` (macOS/Linux) 或 `cpkt-hub.exe` (Windows)
-3. 放到以下任一位置:
-   - `~/.codepocket/bin/cpkt-hub`
-   - `/usr/local/bin/cpkt-hub` (需 sudo)
-   - 任何 PATH 中的目录
-
-```bash
-# 示例: macOS arm64
-curl -L -o ~/.codepocket/bin/cpkt-hub \
-  https://github.com/TinaSummer/CodePocket/releases/latest/download/cpkt-hub-darwin-arm64
-chmod +x ~/.codepocket/bin/cpkt-hub
-```
+npm 包已内置 Hub 二进制（macOS / Linux / Windows），无需额外下载。如需手动更新 Hub，可运行 `codepocket install-hub`。
 
 ## 使用
 

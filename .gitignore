@@ -9,6 +9,9 @@ connector/node_modules/
 proxy/node_modules/
 .superpowers/
 connector/vendor/
+# Platform-specific binaries (managed by scripts/publish.sh, not committed)
+packages/*/bin/codepocket
+packages/*/bin/codepocket.exe
 project.private.config.json
 miniprogram/project.private.config.json
 connector/bun.lock

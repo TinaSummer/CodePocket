@@ -29,6 +29,137 @@ try { localConfig = require('./config.local') } catch {}
 
 const RELAY_URL = localConfig.relayUrl || defaultConfig.relayUrl
 
+// ── End-to-end encryption (X25519 + XSalsa20-Poly1305) ──
+// Relay only forwards e2ePubKey + opaque `enc` envelopes; it cannot decrypt.
+// Nonces are counter-based with a direction tag: phone uses 0x00, connector 0xFF,
+// so the two directions never collide under the same shared key.
+
+const nacl = require('./tweetnacl')
+
+let e2eKeypair = null          // { publicKey, secretKey } Uint8Arrays
+let e2eKeypairPromise = null
+let e2eSharedKey = null        // Uint8Array(32)
+let e2eNonceCounter = 0
+
+function u8ToB64(u8) {
+  const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength)
+  return wx.arrayBufferToBase64(buf)
+}
+
+function b64ToU8(b64) {
+  return new Uint8Array(wx.base64ToArrayBuffer(b64))
+}
+
+function strToU8(str) {
+  // UTF-8 encode without TextEncoder (mini-program may lack it)
+  const bytes = []
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i)
+    if (c < 0x80) bytes.push(c)
+    else if (c < 0x800) { bytes.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f)) }
+    else if (c < 0xd800 || c >= 0xe000) { bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f)) }
+    else { i++; const c2 = str.charCodeAt(i); const cp = 0x10000 + (((c & 0x3ff) << 10) | (c2 & 0x3ff)); bytes.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f)) }
+  }
+  return new Uint8Array(bytes)
+}
+
+function u8ToStr(u8) {
+  let str = ''
+  for (let i = 0; i < u8.length; ) {
+    const b = u8[i++]
+    if (b < 0x80) str += String.fromCharCode(b)
+    else if (b < 0xe0) str += String.fromCharCode(((b & 0x1f) << 6) | (u8[i++] & 0x3f))
+    else if (b < 0xf0) str += String.fromCharCode(((b & 0x0f) << 12) | ((u8[i++] & 0x3f) << 6) | (u8[i++] & 0x3f))
+    else { const cp = ((b & 0x07) << 18) | ((u8[i++] & 0x3f) << 12) | ((u8[i++] & 0x3f) << 6) | (u8[i++] & 0x3f); const off = cp - 0x10000; str += String.fromCharCode(0xd800 | (off >> 10), 0xdc00 | (off & 0x3ff)) }
+  }
+  return str
+}
+
+function ensureE2EKeypair() {
+  if (e2eKeypair) return Promise.resolve(e2eKeypair)
+  if (e2eKeypairPromise) return e2eKeypairPromise
+  e2eKeypairPromise = new Promise((resolve, reject) => {
+    const buf = new ArrayBuffer(32)
+    wx.getRandomValues({
+      buffer: buf,
+      length: 32,
+      success: () => {
+        e2eKeypair = nacl.box.keyPair.fromSecretKey(new Uint8Array(buf))
+        e2eKeypairPromise = null
+        resolve(e2eKeypair)
+      },
+      fail: (err) => { e2eKeypairPromise = null; reject(err) },
+    })
+  })
+  return e2eKeypairPromise
+}
+
+function getE2EPubKeyB64() {
+  return e2eKeypair ? u8ToB64(e2eKeypair.publicKey) : ''
+}
+
+function setPeerE2EPubKey(peerPubKeyB64) {
+  if (!peerPubKeyB64 || !e2eKeypair) return
+  try {
+    const peerPub = b64ToU8(peerPubKeyB64)
+    if (peerPub.length !== 32) return
+    e2eSharedKey = nacl.box.before(peerPub, e2eKeypair.secretKey)
+    e2eNonceCounter = 0
+  } catch {}
+}
+
+function nextNonce() {
+  e2eNonceCounter++
+  const n = new Uint8Array(24)
+  n[0] = 0x00  // phone→connector direction tag
+  let c = e2eNonceCounter
+  for (let i = 6; i >= 1; i--) { n[i] = c & 0xff; c = Math.floor(c / 256) }
+  return n
+}
+
+const E2E_ROUTING = ['type', 'requestId', 'actionId', 'method', 'success', 'ok', 'reconnected', 'status']
+const E2E_ENCRYPTABLE = {
+  'rest-request': 1, 'rest-response': 1, 'sse-event': 1,
+  'spawn-session': 1, 'spawn-session-result': 1,
+  'resume-session': 1, 'resume-session-result': 1,
+  'list-dir': 1, 'list-dir-result': 1,
+  'auth-request': 1, 'auth-response': 1,
+  'phone-action': 1, 'phone-action-response': 1,
+}
+
+function encryptMessage(msg) {
+  if (!e2eSharedKey || !E2E_ENCRYPTABLE[msg.type]) return msg
+  const content = {}
+  for (const k in msg) {
+    if (!E2E_ROUTING.includes(k)) content[k] = msg[k]
+  }
+  if (Object.keys(content).length === 0) return msg
+  try {
+    const plain = strToU8(JSON.stringify(content))
+    const nonce = nextNonce()
+    const cipher = nacl.secretbox(plain, nonce, e2eSharedKey)
+    if (!cipher) return msg
+    const out = {}
+    for (const k of E2E_ROUTING) if (k in msg) out[k] = msg[k]
+    out.enc = { n: u8ToB64(nonce), c: u8ToB64(cipher) }
+    return out
+  } catch { return msg }
+}
+
+function decryptMessage(msg) {
+  if (!msg || !msg.enc || !e2eSharedKey) return msg
+  try {
+    const nonce = b64ToU8(msg.enc.n)
+    const cipher = b64ToU8(msg.enc.c)
+    const plain = nacl.secretbox.open(cipher, nonce, e2eSharedKey)
+    if (!plain) return msg
+    const content = JSON.parse(u8ToStr(plain))
+    delete msg.enc
+    for (const k in content) msg[k] = content[k]
+  } catch {}
+  return msg
+}
+
 function getRelayUrl() {
   // Priority: user-saved (wx.storage) > build-time config
   try {
@@ -81,38 +212,45 @@ function connect(onEvent, onConnected) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null
     }
-    // Auto pair with stored tokens + key
-    const key = wx.getStorageSync('relay_key') || ''
-    const ct = wx.getStorageSync('client_token') || ''
-    const st = wx.getStorageSync('session_token') || ''
-    if (key || ct || st) {
-      socketTask.send({ data: JSON.stringify({ type: 'pair', token: '', key, clientToken: ct, sessionToken: st }) })
-    }
-    // Send queued messages
-    while (pendingQueue.length > 0) {
-      const data = pendingQueue.shift()
-      socketTask.send({ data: JSON.stringify(data) })
-    }
-    // Start heartbeat to keep connection alive
-    if (pingInterval) clearInterval(pingInterval)
-    pingInterval = setInterval(() => {
-      if (socketTask && isConnected) {
-        socketTask.send({ data: JSON.stringify({ type: 'ping' }) })
+    // Ensure E2E keypair is ready before pairing, so e2ePubKey can be included.
+    // wx.getRandomValues is fast (~ms); this adds negligible latency to connection setup.
+    ensureE2EKeypair().catch(() => null).then(() => {
+      if (gen !== connectGeneration) return  // Stale handler
+      // Auto pair with stored tokens + key
+      const key = wx.getStorageSync('relay_key') || ''
+      const ct = wx.getStorageSync('client_token') || ''
+      const st = wx.getStorageSync('session_token') || ''
+      if (key || ct || st) {
+        socketTask.send({ data: JSON.stringify({ type: 'pair', token: '', key, clientToken: ct, sessionToken: st, e2ePubKey: getE2EPubKeyB64() }) })
       }
-    }, 25000)
-    if (onConnectedCallback) onConnectedCallback()
+      // Send queued messages — inject e2ePubKey into any queued pair messages
+      while (pendingQueue.length > 0) {
+        const data = pendingQueue.shift()
+        if (data && data.type === 'pair' && !data.e2ePubKey) data.e2ePubKey = getE2EPubKeyB64()
+        socketTask.send({ data: JSON.stringify(encryptMessage(data)) })
+      }
+      // Start heartbeat to keep connection alive
+      if (pingInterval) clearInterval(pingInterval)
+      pingInterval = setInterval(() => {
+        if (socketTask && isConnected) {
+          socketTask.send({ data: JSON.stringify({ type: 'ping' }) })
+        }
+      }, 25000)
+      if (onConnectedCallback) onConnectedCallback()
+    })
   })
 
   socketTask.onMessage((res) => {
     if (gen !== connectGeneration) return  // Stale handler
     try {
-      const msg = JSON.parse(res.data)
+      const msg = decryptMessage(JSON.parse(res.data))
       // Auto-save tokens from pairing
       if (msg.type === 'paired') {
         isPaired = true
         wx.setStorageSync('client_token', msg.clientToken || '')
         wx.setStorageSync('session_token', msg.sessionToken || '')
         reconnectAttempts = 0  // Reset only on successful pair
+        if (msg.hubE2EPubKey) setPeerE2EPubKey(msg.hubE2EPubKey)
       }
       if (msg.type === 'pair-error') {
         isPaired = false
@@ -186,7 +324,7 @@ function scheduleReconnect() {
 
 function send(data) {
   if (isConnected && socketTask) {
-    socketTask.send({ data: JSON.stringify(data) })
+    socketTask.send({ data: JSON.stringify(encryptMessage(data)) })
     return true
   }
   pendingQueue.push(data)

@@ -25,17 +25,9 @@
 npm i -g @tina_summer/codepocket
 ```
 
-### 2. 安装 Hub 二进制
+npm 包已内置 Hub 二进制（macOS / Linux / Windows），无需额外下载。
 
-Connector 启动时需要 `cpkt-hub` 二进制 (Claude Code 进程管理器)，npm 包不含此文件：
-
-```bash
-codepocket install-hub
-```
-
-自动检测平台并从 [GitHub Releases](https://github.com/TinaSummer/CodePocket/releases/latest) 下载到 `~/.codepocket/bin/`。手动安装方式见 [connector/README.md](connector/README.md#安装-hub)。
-
-### 3. 启动
+### 2. 启动
 
 ```bash
 codepocket

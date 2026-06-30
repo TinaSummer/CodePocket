@@ -1,0 +1,14 @@
+{
+  "name": "@tina_summer/codepocket-linux-x64",
+  "version": "2.6.1",
+  "description": "CodePocket Hub binary for Linux x64",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin"
+  ]
+}

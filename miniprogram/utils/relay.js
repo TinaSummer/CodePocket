@@ -17,6 +17,7 @@ let onEventCallback = null
 let onConnectedCallback = null
 let reconnectTimer = null
 let reconnectAttempts = 0
+let stopped = false        // true when we intentionally stop retrying (rate_limited / invalid_key)
 const MAX_RECONNECT = 20
 const pendingQueue = []
 let onPhoneActionCallback = null
@@ -44,6 +45,7 @@ function getHttpUrl() {
 function connect(onEvent, onConnected) {
   onEventCallback = onEvent
   onConnectedCallback = onConnected
+  stopped = false  // user-initiated connect resets the stop flag
 
   // Already connected — just update callbacks
   if (isConnected && socketTask) {
@@ -114,17 +116,32 @@ function connect(onEvent, onConnected) {
       }
       if (msg.type === 'pair-error') {
         isPaired = false
-        wx.removeStorageSync('client_token')
-        wx.removeStorageSync('session_token')
-        // Hub might be temporarily offline — retry with backoff
-        const key = wx.getStorageSync('relay_key') || ''
-        if (key && reconnectAttempts < MAX_RECONNECT) {
-          isConnected = false
-          try { socketTask.close({ fail() {} }) } catch {}
-          socketTask = null
-          scheduleReconnect()
-          return
+        const code = msg.code || 'unknown'
+        // Only stop retrying for definitive "retrying won't help" codes.
+        // rate_limited: retrying makes it worse. invalid_key: will never succeed.
+        // Everything else (hub_offline, unknown/old-relay) → keep retrying.
+        const shouldStop = (code === 'rate_limited' || code === 'invalid_key')
+        if (shouldStop) {
+          stopped = true
+          if (code === 'invalid_key') {
+            wx.removeStorageSync('client_token')
+            wx.removeStorageSync('session_token')
+            wx.removeStorageSync('relay_key')  // force re-register on next setup
+          }
+          if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+        } else {
+          // hub_offline (valid key, computer not connected) or unknown (old relay) — retry
+          wx.removeStorageSync('client_token')
+          wx.removeStorageSync('session_token')
+          if (reconnectAttempts < MAX_RECONNECT) {
+            isConnected = false
+            try { socketTask.close({ fail() {} }) } catch {}
+            socketTask = null
+            scheduleReconnect()
+          }
         }
+        if (onEventCallback) onEventCallback(msg)
+        return
       }
       if (msg.type === 'sse-event') {
         // sse-event handled by callbacks below
@@ -156,6 +173,7 @@ function connect(onEvent, onConnected) {
 }
 
 function scheduleReconnect() {
+  if (stopped) return
   if (reconnectAttempts >= MAX_RECONNECT) return
   if (reconnectTimer) return
   const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000)

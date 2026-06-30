@@ -435,12 +435,18 @@ const ALLOWED_ORIGINS = [
 app.get('/ws', upgradeWebSocket(() => ({
   onOpen(event, ws) {
     // Validate Origin header
-    const origin = event.request?.headers?.origin || ''
+    const headers = event.request?.headers || {}
+    const origin = headers.origin || ''
     if (origin && !ALLOWED_ORIGINS.includes(origin) && !origin.startsWith('https://servicewechat.com')) {
       ws.close(4003, 'Forbidden origin')
       return
     }
-    connState.set(ws, { role: null, clientToken: '', hubToken: '', ip: '', keyId: '' })
+    // Extract real client IP (behind nginx proxy) for per-IP rate limiting.
+    // Without this, all WS connections share ip='' and one client's failures ban everyone.
+    const ip = (headers['x-forwarded-for'] || '').split(',')[0].trim()
+      || headers['x-real-ip']
+      || 'unknown'
+    connState.set(ws, { role: null, clientToken: '', hubToken: '', ip, keyId: '' })
   },
 
   onMessage(event, ws) {
@@ -497,15 +503,15 @@ app.get('/ws', upgradeWebSocket(() => ({
       case 'pair': {
         state.role = 'client'
         console.log(`[relay] pair: key=${(msg.key || '').slice(0, 8)} ct=${(msg.clientToken || '').slice(0, 8)} st=${(msg.sessionToken || '').slice(0, 8)} hubs=${hubs.size}`)
+        // 1. Rate limit — per real IP (set in onOpen)
         if (!checkRateLimit(state.ip)) {
-          ws.send(JSON.stringify({ type: 'pair-error', error: 'Too many attempts' }))
+          ws.send(JSON.stringify({ type: 'pair-error', code: 'rate_limited', error: '尝试过于频繁，请 5 分钟后重试' }))
           return
         }
         const ct = msg.clientToken || genToken()
-        // Reconnect with existing clientToken
+        // 2. Reconnect with existing clientToken
         if (ct && clients.has(ct)) {
           const e = clients.get(ct)
-          // Check if hub still exists — if cleaned up, fall through to pair-by-key
           if (e.hubToken && hubs.has(e.hubToken)) {
             const hub = hubs.get(e.hubToken)
             hub.clients.delete(e.ws); hub.clients.add(ws)
@@ -513,10 +519,9 @@ app.get('/ws', upgradeWebSocket(() => ({
             ws.send(JSON.stringify({ type: 'paired', sessionToken: e.hubToken, clientToken: ct, reconnected: true }))
             return
           }
-          // Hub gone — remove stale client entry and fall through
           clients.delete(ct)
         }
-        // Reconnect with sessionToken (clientToken lost but hub still online)
+        // 3. Reconnect with sessionToken (clientToken lost but hub still online)
         if (msg.sessionToken && hubs.has(msg.sessionToken)) {
           const hub = hubs.get(msg.sessionToken)
           clients.set(ct, { ws, hubToken: msg.sessionToken, clientToken: ct })
@@ -524,7 +529,7 @@ app.get('/ws', upgradeWebSocket(() => ({
           ws.send(JSON.stringify({ type: 'paired', sessionToken: msg.sessionToken, clientToken: ct, reconnected: true }))
           return
         }
-        // Pair by key: find hub with matching keyId (no token needed)
+        // 4. Pair by key: find hub with matching keyId
         const pairKey = String(msg.key || '').trim()
         if (pairKey && isValidKey(pairKey)) {
           let matchedHub = null
@@ -536,29 +541,44 @@ app.get('/ws', upgradeWebSocket(() => ({
             matchedHub.clients.add(ws); state.clientToken = ct; state.hubToken = matchedHub.sessionToken
             ws.send(JSON.stringify({ type: 'paired', sessionToken: matchedHub.sessionToken, clientToken: ct }))
             try { matchedHub.ws.send(JSON.stringify({ type: 'client-connected' })) } catch {}
-            // Record pairing time
             const keys = loadKeys()
             const ki = keys.findIndex(k => k.key === pairKey)
             if (ki >= 0) { keys[ki].lastPairedAt = Date.now(); saveKeys(keys) }
             break
           }
-        }
-        // Legacy: pair by token
-        const token = String(msg.token || '').trim()
-        const hubId = pendingPairs.get(token)
-        if (!hubId) {
-          recordFail(state.ip)
-          ws.send(JSON.stringify({ type: 'pair-error', error: 'Hub 不在线或配对码无效' }))
+          // Valid key, but no hub online — normal transient (user hasn't run codepocket yet).
+          // Do NOT recordFail: this is an expected waiting state, not abuse.
+          ws.send(JSON.stringify({
+            type: 'pair-error',
+            code: 'hub_offline',
+            error: '电脑尚未连接，请在电脑上执行: codepocket --key ' + pairKey.slice(0, 12) + '...',
+          }))
           return
         }
-        const hub = hubs.get(hubId)
-        if (!hub) { ws.send(JSON.stringify({ type: 'pair-error', error: 'Hub 不在线' })); return }
-        clients.set(ct, { ws, hubToken: hub.sessionToken, clientToken: ct })
-        hub.clients.add(ws); state.clientToken = ct; state.hubToken = hub.sessionToken
-        pendingPairs.delete(token); hub.token = ''
-        ws.send(JSON.stringify({ type: 'paired', sessionToken: hub.sessionToken, clientToken: ct }))
-        try { hub.ws.send(JSON.stringify({ type: 'client-connected' })) } catch {}
-        break
+        // 5. Legacy: pair by token (old clients without key)
+        const token = String(msg.token || '').trim()
+        if (token) {
+          const hubId = pendingPairs.get(token)
+          if (hubId) {
+            const hub = hubs.get(hubId)
+            if (hub) {
+              clients.set(ct, { ws, hubToken: hub.sessionToken, clientToken: ct })
+              hub.clients.add(ws); state.clientToken = ct; state.hubToken = hub.sessionToken
+              pendingPairs.delete(token); hub.token = ''
+              ws.send(JSON.stringify({ type: 'paired', sessionToken: hub.sessionToken, clientToken: ct }))
+              try { hub.ws.send(JSON.stringify({ type: 'client-connected' })) } catch {}
+              break
+            }
+          }
+        }
+        // 6. No valid key, no valid token — record fail (guards against brute force / probing)
+        recordFail(state.ip)
+        ws.send(JSON.stringify({
+          type: 'pair-error',
+          code: 'invalid_key',
+          error: pairKey ? 'Key 无效或已吊销，请在小程序重新申请' : '缺少 Key，请在小程序完成配对',
+        }))
+        return
       }
 
       case 'sse-event': {

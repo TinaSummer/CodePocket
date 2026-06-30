@@ -77,7 +77,20 @@ Page({
         }, 600)
       }
       if (msg.type === 'pair-error') {
-        this.setData({ error: '配对失败，请检查 Key 是否正确', step: 'show_command' })
+        const code = msg.code || 'unknown'
+        if (code === 'hub_offline') {
+          // Valid key, computer hasn't connected yet — normal waiting state.
+          // Keep step at 'connecting' so the waiting animation + command are visible.
+          this.setData({ error: '' })
+        } else if (code === 'rate_limited') {
+          this.setData({ error: '尝试过于频繁，请 5 分钟后再试', step: 'show_command' })
+        } else if (code === 'invalid_key') {
+          this.setData({ error: 'Key 无效或已吊销，正在重新申请…', step: 'show_command' })
+          // relay.js already cleared relay_key — re-register after showing the message
+          setTimeout(() => this.register(), 1500)
+        } else {
+          this.setData({ error: msg.error || '配对失败，请重试', step: 'show_command' })
+        }
       }
     })
     const clientToken = wx.getStorageSync('client_token') || ''

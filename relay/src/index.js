@@ -484,6 +484,7 @@ app.get('/ws', upgradeWebSocket(() => ({
         if (msg.sessionToken && hubs.has(msg.sessionToken)) {
           const e = hubs.get(msg.sessionToken)
           e.ws = ws
+          e.lastSeen = Date.now()
           state.hubToken = msg.sessionToken
           ws.send(JSON.stringify({
             type: 'registered',
@@ -491,6 +492,12 @@ app.get('/ws', upgradeWebSocket(() => ({
             sessionToken: msg.sessionToken,
             reconnected: true,
           }))
+          // Re-notify hub of every still-connected client so E2E handshake
+          // completes on hub restart (orphaned clients are silently routed
+          // here otherwise — hub never learns their e2ePubKey).
+          for (const cws of e.clients) {
+            try { ws.send(JSON.stringify({ type: 'client-connected', clientE2EPubKey: getE2EPubKey(cws), reconnected: true })) } catch {}
+          }
           return
         }
 
@@ -503,6 +510,9 @@ app.get('/ws', upgradeWebSocket(() => ({
             client.hubToken = st
             clientsForHub.add(client.ws)
             try { client.ws.send(JSON.stringify({ type: 'paired', sessionToken: st, clientToken: client.clientToken, reconnected: true, hubE2EPubKey: msg.e2ePubKey || '' })) } catch {}
+            // Re-notify hub of the migrated client's e2ePubKey so the new
+            // hub session can complete E2E handshake without a fresh pair.
+            try { ws.send(JSON.stringify({ type: 'client-connected', clientE2EPubKey: getE2EPubKey(client.ws), reconnected: true })) } catch {}
           }
         }
         hubs.set(st, {

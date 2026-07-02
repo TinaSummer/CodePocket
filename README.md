@@ -15,6 +15,7 @@
 - **分享对话** — 一键导出对话记录，生成分享链接
 - **Daemon 模式** — 后台常驻运行，开机自启
 - **自部署 Relay** — 用户可部署自己的 Relay 服务器，小程序中填入地址即可使用
+- **端到端加密** — X25519 + XSalsa20-Poly1305，Relay 服务器只转发密文，无法解密内容
 - **代理支持** — 自动识别 `HTTPS_PROXY` / `HTTP_PROXY` 环境变量，公司网络可用
 
 ## 快速开始
@@ -25,7 +26,7 @@
 npm i -g @tina_summer/codepocket
 ```
 
-npm 包已内置 Hub 二进制（macOS / Linux / Windows），无需额外下载。
+npm 包已通过 `optionalDependencies` 内置四个平台的 Hub 二进制（macOS arm64/x64、Linux x64、Windows x64），安装时自动选择对应平台，无需额外下载。如需手动更新或修复 Hub，可运行 `codepocket install-hub` 从 GitHub Releases 重新下载。
 
 ### 2. 启动
 
@@ -118,7 +119,7 @@ CodePocket/
 └── Caddyfile         # Caddy 反代配置
 ```
 
-> Hub 二进制 (`cpkt-hub`) 通过 GitHub Releases 分发，不在仓库内。运行 `codepocket install-hub` 自动下载。
+> Hub 二进制 (`cpkt-hub`) 通过 `packages/<platform>/bin/` 平台子包随 npm 一起分发，源码不在仓库内。如需手动重装，运行 `codepocket install-hub` 从 GitHub Releases 下载。
 
 ### 小程序页面
 
@@ -146,6 +147,26 @@ CodePocket/
 ```
 
 Relay 是纯转发中间人，负责路由消息。CLI 和小程序通过 Relay 建立双向通信。
+
+## 安全
+
+### 端到端加密（自 v2.6.1 起）
+
+所有经由 Relay 转发的业务消息都端到端加密，Relay 服务器**只看到密文**：
+
+- **密钥协商**：CLI 与小程序在配对时通过 Relay 交换 X25519 临时公钥，各自用 `nacl.box.before()` 派生共享密钥。Relay 看到两个公钥但无法算出共享密钥。
+- **加密范围**：会话消息、文件读取、命令输出、SSE 事件、`rest-request`/`spawn-session`/`resume-session`/`list-dir`/`auth-request` 的 body 全部进入 `enc` 信封；只有路由字段（`type`/`requestId`/`status` 等）保持明文。
+- **Nonce 设计**：基于计数器 + 方向标签（CLI→手机以 `0xFF` 开头，手机→CLI 以 `0x00` 开头），在同一把共享密钥下避免重用——这一选择也是为了规避小程序 `wx.getRandomValues` 只能异步调用的限制。
+- **向后兼容**：旧版 peer 不发 `e2ePubKey` 时自动降级为明文，升级不会断链。
+
+### Relay 侧加固
+
+- `/register` 在托管模式（配置了 `WX_APPID`/`WX_SECRET`）下强制校验微信 `code`，杜绝匿名批量造 Key
+- `/share` 上传要求有效 Relay Key，防止匿名 COS 滥用
+- `keys.json` 写入权限 `0600`，`DATA_DIR` 权限 `0700`
+- 健康检查端点不再暴露连接数/用户数
+- WebSocket 限流按 `X-Forwarded-For` / `X-Real-IP` 真实 IP 分桶，避免单 IP 失败拖全用户下水
+- 配对错误分类：`hub_offline`（电脑还没连）不计入失败次数，新用户首次不再被误 ban
 
 ## 本地开发
 

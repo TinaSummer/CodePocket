@@ -63,6 +63,10 @@ codepocket
 - **YOLO 模式** — 全自动审批，无人值守运行
 - **手机工具** — GPS、日历、剪贴板、地图等原生能力通过 MCP 暴露给 Claude
 
+## 安全
+
+自 v2.6.1 起，CLI 与小程序之间经由 Relay 的所有业务流量都端到端加密（X25519 + XSalsa20-Poly1305）。Relay 服务器只转发密文信封，无法解密会话内容、文件读取或命令输出。配对时双方通过 Relay 交换 X25519 临时公钥派生共享密钥，Nonce 使用计数器 + 方向标签避免重用。详见根目录 [why-codepocket.md](../why-codepocket.md#为什么端到端加密)。
+
 ## 可选：CC-Switch
 
 [CC-Switch](https://github.com/farion1231/cc-switch) 是管理 Claude Code 多 API 密钥/中转服务商的切换工具，下载地址：[Releases](https://github.com/farion1231/cc-switch/releases/latest)

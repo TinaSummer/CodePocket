@@ -543,6 +543,10 @@ app.get('/ws', upgradeWebSocket(() => ({
             hub.clients.delete(e.ws); hub.clients.add(ws)
             e.ws = ws; state.clientToken = ct; state.hubToken = e.hubToken
             ws.send(JSON.stringify({ type: 'paired', sessionToken: e.hubToken, clientToken: ct, reconnected: true, hubE2EPubKey: getE2EPubKey(hub.ws) }))
+            // Re-notify hub so it can rebuild E2E shared key from the
+            // (possibly rotated) client e2ePubKey — covers hub restart
+            // where hub has a fresh keypair but client reconnected silently.
+            try { hub.ws.send(JSON.stringify({ type: 'client-connected', clientE2EPubKey: state.e2ePubKey, reconnected: true })) } catch {}
             return
           }
           clients.delete(ct)
@@ -553,6 +557,7 @@ app.get('/ws', upgradeWebSocket(() => ({
           clients.set(ct, { ws, hubToken: msg.sessionToken, clientToken: ct })
           hub.clients.add(ws); state.clientToken = ct; state.hubToken = msg.sessionToken
           ws.send(JSON.stringify({ type: 'paired', sessionToken: msg.sessionToken, clientToken: ct, reconnected: true, hubE2EPubKey: getE2EPubKey(hub.ws) }))
+          try { hub.ws.send(JSON.stringify({ type: 'client-connected', clientE2EPubKey: state.e2ePubKey, reconnected: true })) } catch {}
           return
         }
         // 4. Pair by key: find hub with matching keyId

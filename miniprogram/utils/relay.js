@@ -76,7 +76,6 @@ function u8ToStr(u8) {
 }
 
 function ensureE2EKeypair() {
-  if (e2eKeypair) return Promise.resolve(e2eKeypair)
   if (e2eKeypairPromise) return e2eKeypairPromise
   e2eKeypairPromise = new Promise((resolve, reject) => {
     const buf = new ArrayBuffer(32)
@@ -85,6 +84,12 @@ function ensureE2EKeypair() {
       length: 32,
       success: () => {
         e2eKeypair = nacl.box.keyPair.fromSecretKey(new Uint8Array(buf))
+        // Reset E2E state so the shared key is rebuilt from the new keypair
+        // on the next `paired`. Without this, a hub restart (which forces
+        // hub to rotate its keypair) leaves us encrypting with a stale
+        // shared key the new hub cannot derive.
+        e2eSharedKey = null
+        e2eNonceCounter = 0
         e2eKeypairPromise = null
         resolve(e2eKeypair)
       },

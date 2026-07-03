@@ -492,11 +492,18 @@ app.get('/ws', upgradeWebSocket(() => ({
             sessionToken: msg.sessionToken,
             reconnected: true,
           }))
-          // Re-notify hub of every still-connected client so E2E handshake
-          // completes on hub restart (orphaned clients are silently routed
-          // here otherwise — hub never learns their e2ePubKey).
+          // Hub has rotated its keypair (process restart). Re-establish E2E
+          // on both sides: tell hub each client's cached e2ePubKey, AND tell
+          // each client the new hub e2ePubKey so they rebuild shared key.
+          // Without the client-side notify, client keeps using the stale
+          // shared key (derived from hub's old pubkey) — every encrypted
+          // request/SSE silently fails until next reconnect.
+          const newHubE2EPubKey = msg.e2ePubKey || ''
           for (const cws of e.clients) {
             try { ws.send(JSON.stringify({ type: 'client-connected', clientE2EPubKey: getE2EPubKey(cws), reconnected: true })) } catch {}
+            const cs = connState.get(cws)
+            const ct = cs?.clientToken || ''
+            try { cws.send(JSON.stringify({ type: 'paired', sessionToken: msg.sessionToken, clientToken: ct, reconnected: true, hubE2EPubKey: newHubE2EPubKey })) } catch {}
           }
           return
         }

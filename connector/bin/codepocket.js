@@ -496,7 +496,12 @@ async function authenticateHub(token) {
 async function startSSE() {
   const url = `${hubUrl}/api/events?all=true`
   try {
-    const res = await fetch(url, { headers: { Accept: 'text/event-stream', ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) } })
+    let res = await fetch(url, { headers: { Accept: 'text/event-stream', ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) } })
+    // JWT expired — refresh and retry once before entering the retry loop
+    if (res.status === 401) {
+      try { const token = await findHubToken(); jwt = await authenticateHub(token) } catch {}
+      res = await fetch(url, { headers: { Accept: 'text/event-stream', ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) } })
+    }
     if (!res.ok || !res.body) { setTimeout(startSSE, 5000); return }
     const reader = res.body.getReader()
     const decoder = new TextDecoder()

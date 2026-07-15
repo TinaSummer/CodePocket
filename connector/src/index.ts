@@ -80,13 +80,23 @@ function startSSE() {
 
   ;(async () => {
     try {
-      const res = await fetch(url, {
+      let res = await fetch(url, {
         signal: sseController!.signal,
         headers: { Accept: 'text/event-stream' },
       })
 
+      // JWT expired — refresh and retry once
+      if (res.status === 401) {
+        try { jwt = await authenticateHub() } catch {}
+        res = await fetch(`${hubUrl}/api/events?token=${encodeURIComponent(jwt)}&all=true`, {
+          signal: sseController!.signal,
+          headers: { Accept: 'text/event-stream' },
+        })
+      }
+
       if (!res.ok || !res.body) {
         console.error(`[SSE] connection failed: ${res.status}`)
+        setTimeout(startSSE, 5000)
         return
       }
 

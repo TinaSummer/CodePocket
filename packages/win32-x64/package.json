@@ -1,6 +1,6 @@
 {
   "name": "@tina_summer/codepocket-win32-x64",
-  "version": "2.6.1",
+  "version": "2.6.3",
   "description": "CodePocket Hub binary for Windows x64",
   "os": [
     "win32"

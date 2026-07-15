@@ -1,6 +1,6 @@
 {
   "name": "@tina_summer/codepocket",
-  "version": "2.6.2",
+  "version": "2.6.3",
   "description": "CodePocket — 基于ClaudeCode的微信小程序工作台",
   "bin": {
     "codepocket": "bin/codepocket.js",
@@ -20,10 +20,10 @@
     "ws": "^8.18.0"
   },
   "optionalDependencies": {
-    "@tina_summer/codepocket-darwin-arm64": "2.6.1",
-    "@tina_summer/codepocket-darwin-x64": "2.6.1",
-    "@tina_summer/codepocket-linux-x64": "2.6.1",
-    "@tina_summer/codepocket-win32-x64": "2.6.1"
+    "@tina_summer/codepocket-darwin-arm64": "2.6.3",
+    "@tina_summer/codepocket-darwin-x64": "2.6.3",
+    "@tina_summer/codepocket-linux-x64": "2.6.3",
+    "@tina_summer/codepocket-win32-x64": "2.6.3"
   },
   "engines": {
     "node": ">=18"

@@ -502,14 +502,26 @@ async function startSSE() {
       try { const token = await findHubToken(); jwt = await authenticateHub(token) } catch {}
       res = await fetch(url, { headers: { Accept: 'text/event-stream', ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) } })
     }
-    if (!res.ok || !res.body) { setTimeout(startSSE, 5000); return }
+    if (!res.ok || !res.body) { log(`[codepocket] SSE connect failed: ${res.status}, retry in 5s`); setTimeout(startSSE, 5000); return }
+    log('[codepocket] SSE connected')
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    let lastDataAt = Date.now()
+    // Watchdog: hub emits heartbeat every 10s. If silent for 45s, the TCP
+    // connection is zombie (NAT/Nginx/CF silent drop) — force reconnect.
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastDataAt > 45000) {
+        log('[codepocket] SSE watchdog: no data for 45s, forcing reconnect')
+        clearInterval(watchdog)
+        try { reader.cancel() } catch {}
+      }
+    }, 15000)
     async function pump() {
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
+        lastDataAt = Date.now()
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
@@ -519,10 +531,12 @@ async function startSSE() {
           }
         }
       }
+      clearInterval(watchdog)
+      log('[codepocket] SSE stream ended, reconnecting in 5s')
       setTimeout(startSSE, 5000)
     }
-    pump().catch(() => { setTimeout(startSSE, 5000) })
-  } catch { setTimeout(startSSE, 5000) }
+    pump().catch(() => { clearInterval(watchdog); setTimeout(startSSE, 5000) })
+  } catch (e) { log(`[codepocket] SSE error: ${e?.message}, retry in 5s`); setTimeout(startSSE, 5000) }
 }
 
 // ── End-to-end encryption (X25519 + XSalsa20-Poly1305) ──

@@ -100,32 +100,52 @@ function startSSE() {
         return
       }
 
+      console.log('[SSE] connected')
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let lastDataAt = Date.now()
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+      // Watchdog: hub emits heartbeat every 10s. If silent for 45s, the TCP
+      // connection is zombie (NAT/Nginx/CF silent drop) — force reconnect.
+      const watchdog = setInterval(() => {
+        if (Date.now() - lastDataAt > 45000) {
+          console.error('[SSE] watchdog: no data for 45s, forcing reconnect')
+          clearInterval(watchdog)
+          try { reader.cancel() } catch {}
+        }
+      }, 15000)
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
 
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const raw = line.slice(5).trim()
-            if (!raw) continue
-            try {
-              const event = JSON.parse(raw)
-              forwardToRelay({ type: 'sse-event', event })
-            } catch {}
+          lastDataAt = Date.now()
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              const raw = line.slice(5).trim()
+              if (!raw) continue
+              try {
+                const event = JSON.parse(raw)
+                forwardToRelay({ type: 'sse-event', event })
+              } catch {}
+            }
           }
         }
+        console.error('[SSE] stream ended, reconnecting in 5s...')
+      } finally {
+        clearInterval(watchdog)
       }
+
+      setTimeout(startSSE, 5000)
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        console.error('[SSE] stream ended, reconnecting in 5s...')
+        console.error(`[SSE] error: ${err.message}, reconnecting in 5s...`)
         setTimeout(startSSE, 5000)
       }
     }

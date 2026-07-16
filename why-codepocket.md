@@ -203,6 +203,24 @@ CodePocket 的解法：
 | **只有业务字段加密** | 路由字段（`type`/`requestId`/`status`）保持明文让 Relay 仍能路由；body 进入 `enc` 信封 |
 | **向后兼容降级** | 旧版客户端不发 `e2ePubKey`，自动降级明文——升级不需要断链 |
 
+#### 重连时的通道恢复
+
+临时密钥意味着 keypair 只活在进程内存里——任何一端重启（hub 崩溃、CLI 升级、电脑休眠唤醒）都会让 keypair 重置。如果重连时不重新协商，双方算出的 sharedKey 就永久错配，E2E 通道静默失效（消息能发出但解密失败，`event` 字段合并不回来，小程序看到的就是"不刷新"）。
+
+CodePocket 让 Relay 在重连路径上补发握手消息：
+
+```
+场景: hub 重启 → keypair 轮换；client 用旧 clientToken 重连
+
+  client ──► relay: pair(clientToken=旧, e2ePubKey=轮换后新公钥)
+  relay 做两件事:
+    1. relay ──► client: paired(hubE2EPubKey=hub 当前公钥)   ← 让 client 重建 sharedKey
+    2. relay ──► hub:     client-connected(clientE2EPubKey=client 新公钥) ← 让 hub 重建 sharedKey
+  双方各自 nacl.box.before() 重算出一致的新 sharedKey，counter 归零
+```
+
+三条重连路径（hub 用 `sessionToken` 重连、client 用 `clientToken` 重连、client 用 `sessionToken` 重连）都会触发补发，所以 hub/CLI/小程序任一重启都能在下次 WebSocket 重连（通常 3 秒内）后自动恢复 E2E，无需重新配对或杀进程。
+
 这条设计让自部署 Relay 也能"零信任"：即使你把 Relay 部署在不可信的 VPS 上，会话内容也不会泄露给运营方。
 
 ### 为什么用 Canvas 渲染分享图？

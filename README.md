@@ -158,6 +158,7 @@ Relay 是纯转发中间人，负责路由消息。CLI 和小程序通过 Relay 
 - **加密范围**：会话消息、文件读取、命令输出、SSE 事件、`rest-request`/`spawn-session`/`resume-session`/`list-dir`/`auth-request` 的 body 全部进入 `enc` 信封；只有路由字段（`type`/`requestId`/`status` 等）保持明文。
 - **Nonce 设计**：基于计数器 + 方向标签（CLI→手机以 `0xFF` 开头，手机→CLI 以 `0x00` 开头），在同一把共享密钥下避免重用——这一选择也是为了规避小程序 `wx.getRandomValues` 只能异步调用的限制。
 - **向后兼容**：旧版 peer 不发 `e2ePubKey` 时自动降级为明文，升级不会断链。
+- **重连自动恢复**：hub/CLI/小程序任一重启导致 keypair 轮换后，Relay 在 WebSocket 重连路径上补发双方公钥，下次重连（通常 3 秒内）自动重建 E2E 通道，无需重新配对。详见 [why-codepocket.md](why-codepocket.md#重连时的通道恢复)。
 
 ### Relay 侧加固
 

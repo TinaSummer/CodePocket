@@ -64,7 +64,7 @@ echo ""
 
 # ── 1. 系统依赖 ──
 
-echo "[1/5] 安装系统依赖..."
+echo "[1/6] 安装系统依赖..."
 
 if command -v apt-get &>/dev/null; then
   sudo apt-get update -qq
@@ -77,7 +77,7 @@ echo "  Nginx: $(nginx -v 2>&1)"
 
 # ── 2. Bun ──
 
-echo "[2/5] 安装 Bun..."
+echo "[2/6] 安装 Bun..."
 
 if ! command -v bun &>/dev/null; then
   curl -fsSL https://bun.sh/install | bash
@@ -89,7 +89,7 @@ echo "  Bun: $(bun --version)"
 
 # ── 3. 独立用户 + 目录 ──
 
-echo "[3/5] 创建隔离用户..."
+echo "[3/6] 创建隔离用户..."
 
 if ! id "$RELAY_USER" &>/dev/null; then
   sudo useradd --system --no-create-home --shell /usr/sbin/nologin "$RELAY_USER"
@@ -126,7 +126,7 @@ sudo chown -R "$RELAY_USER:$RELAY_USER" "$INSTALL_DIR"
 
 # ── 4. Relay systemd 服务 ──
 
-echo "[4/5] 配置 Relay 服务..."
+echo "[4/6] 配置 Relay 服务..."
 
 BUN_PATH=$(command -v bun)
 
@@ -170,7 +170,7 @@ echo "  Relay 服务已启动 (用户: $RELAY_USER, 仅 127.0.0.1:$RELAY_PORT)"
 
 # ── 5. Nginx + HTTPS + 限流 ──
 
-echo "[5/5] 配置 Nginx..."
+echo "[5/6] 配置 Nginx..."
 
 # Add rate limiting zone to nginx.conf (only once)
 if ! grep -q "codepocket_ws_limit" /etc/nginx/nginx.conf 2>/dev/null; then
@@ -261,6 +261,54 @@ sudo ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/$DOMAIN
 sudo nginx -t && sudo systemctl reload nginx
 
 sudo systemctl enable certbot.timer 2>/dev/null || true
+
+# ── 6. 健康检查 ──
+
+echo "[6/6] 健康检查..."
+sleep 2  # 给 relay 一点时间启动 + 绑定端口
+
+CHECKS_OK=true
+
+# 6.1 systemd 服务在跑(没在跑通常是 env var / 依赖问题)
+if systemctl is-active --quiet codepocket-relay; then
+  echo "  ✓ relay 服务运行中"
+else
+  echo "  ✗ relay 服务未启动 — 查日志:"
+  echo "    sudo journalctl -u codepocket-relay -n 30 --no-pager"
+  echo "  常见原因: /etc/codepocket-relay.env 里变量名拼错(必须是 RELAY_KEYS 不是 RELAY_KEY)"
+  CHECKS_OK=false
+fi
+
+# 6.2 本地端口响应(GET / 返回 {ok:true})
+if curl -sf http://127.0.0.1:$RELAY_PORT/ >/dev/null 2>&1; then
+  echo "  ✓ relay 本地端口 127.0.0.1:$RELAY_PORT 响应正常"
+else
+  echo "  ✗ relay 本地端口无响应 — 查日志: sudo journalctl -u codepocket-relay -n 30"
+  CHECKS_OK=false
+fi
+
+# 6.3 公网 URL 走 nginx 反代能通(DNS 未生效/证书申请失败时降级为 warning)
+PUBLIC_OK=false
+for i in 1 2 3; do
+  if curl -sf https://$DOMAIN/ >/dev/null 2>&1; then
+    PUBLIC_OK=true
+    break
+  fi
+  sleep 2
+done
+if $PUBLIC_OK; then
+  echo "  ✓ 公网地址 https://$DOMAIN 响应正常"
+else
+  echo "  ⚠ 公网地址暂未响应(可能是 DNS 未生效 / SSL 证书还在申请)"
+  echo "    稍后手动测试: curl https://$DOMAIN/"
+  echo "    若长期不通,查 nginx: sudo nginx -t && sudo tail -20 /var/log/nginx/error.log"
+fi
+
+if ! $CHECKS_OK; then
+  echo ""
+  echo "  ⚠ 基础检查未通过,relay 不可用。修好上面 ✗ 标出的问题后再继续。"
+  exit 1
+fi
 
 echo ""
 echo "════════════════════════════════════════"

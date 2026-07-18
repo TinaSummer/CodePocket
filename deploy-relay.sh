@@ -8,7 +8,7 @@ set -euo pipefail
 #   bash deploy-relay.sh --domain your-domain.com
 #
 # 安全措施:
-#   - RELAY_KEY 注册密钥 (自动生成)
+#   - RELAY_KEYS 管理员密钥 (用于 /admin API, 自动生成)
 #   - 独立系统用户运行 relay (无 shell, 无 home)
 #   - Nginx WebSocket 连接频率限制
 #   - 绑定 127.0.0.1, 不对外暴露端口
@@ -20,7 +20,7 @@ INSTALL_DIR="/opt/codepocket-relay"
 RELAY_USER="codepocket-relay"
 SSL_CERT=""
 SSL_KEY=""
-RELAY_KEY=""
+RELAY_KEYS=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
     --dir)        INSTALL_DIR="$2"; shift 2 ;;
     --ssl-cert)   SSL_CERT="$2"; shift 2 ;;
     --ssl-key)    SSL_KEY="$2"; shift 2 ;;
-    --key)        RELAY_KEY="$2"; shift 2 ;;
+    --key)        RELAY_KEYS="$2"; shift 2 ;;
     *) echo "Unknown: $1"; exit 1 ;;
   esac
 done
@@ -40,15 +40,15 @@ if [[ -z "$DOMAIN" ]]; then
   echo "参数:"
   echo "  --domain     你的域名 (必须已解析到本服务器)"
   echo "  --port       Relay 端口 (默认 3010)"
-  echo "  --key        Relay 注册密钥 (不填则自动生成)"
+  echo "  --key        Relay 管理员密钥 (不填则自动生成,仅用于 /admin API)"
   echo "  --ssl-cert   SSL 证书路径 (可选, 不填则用 certbot)"
   echo "  --ssl-key    SSL 私钥路径 (可选)"
   exit 1
 fi
 
 # Auto-generate key if not provided
-if [[ -z "$RELAY_KEY" ]]; then
-  RELAY_KEY=$(openssl rand -hex 32)
+if [[ -z "$RELAY_KEYS" ]]; then
+  RELAY_KEYS=$(openssl rand -hex 32)
 fi
 
 echo "╔══════════════════════════════════════╗"
@@ -59,7 +59,7 @@ echo "域名: $DOMAIN"
 echo "端口: $RELAY_PORT (仅 127.0.0.1)"
 echo "目录: $INSTALL_DIR"
 echo "用户: $RELAY_USER"
-echo "密钥: ${RELAY_KEY:0:8}..."
+echo "管理员密钥: ${RELAY_KEYS:0:8}... (完整值在部署结束后输出)"
 echo ""
 
 # ── 1. 系统依赖 ──
@@ -133,7 +133,7 @@ BUN_PATH=$(command -v bun)
 # Store key in env file (root-only readable)
 sudo tee "/etc/codepocket-relay.env" > /dev/null <<EOF
 RELAY_PORT=$RELAY_PORT
-RELAY_KEY=$RELAY_KEY
+RELAY_KEYS=$RELAY_KEYS
 NODE_ENV=production
 EOF
 sudo chmod 600 /etc/codepocket-relay.env
@@ -277,11 +277,17 @@ echo "    - systemd 沙箱: ProtectSystem/ProtectHome/PrivateTmp"
 echo "    - Nginx 限流: WebSocket 30次/分, API 60次/分"
 echo "    - 密钥文件: /etc/codepocket-relay.env (root:root, 600)"
 echo ""
-echo "  ⚠️  记住这个密钥，用户连接时需要:"
-echo "  $RELAY_KEY"
+echo "  ⚠️  管理员密钥 (仅用于 /admin API, 客户端连接不需要):"
+echo "  $RELAY_KEYS"
+echo "  (忘记可执行: cat /etc/codepocket-relay.env)"
 echo ""
-echo "  用户运行:"
-echo "    npx codepocket-connect --relay wss://$DOMAIN/ws --key $RELAY_KEY"
+echo "  ── 客户端连接流程 ──"
+echo "  1. 微信小程序 → 设置 → Relay 地址 → 填入 wss://$DOMAIN/ws"
+echo "  2. 回到小程序首页,会自动申请 user key 并显示完整连接命令"
+echo "  3. 把小程序显示的命令复制到电脑终端运行(命令里的 key 由小程序申请,不是上面的管理员密钥)"
+echo ""
+echo "  示例命令(key 由小程序自动生成,不要填管理员密钥):"
+echo "    codepocket --relay wss://$DOMAIN/ws --key <小程序显示的Key>"
 echo ""
 echo "  管理命令:"
 echo "    systemctl status codepocket-relay"

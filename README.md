@@ -92,10 +92,15 @@ bash deploy-relay.sh --domain relay.your-domain.com
 - 申请 SSL 证书并配置 WSS 反向代理
 - 添加 WebSocket / API 限流规则
 
-部署完成后会输出自动生成的 `RELAY_KEY`。然后在微信小程序的 **设置 → Relay 地址** 中填入 `wss://relay.your-domain.com/ws`，启动 CLI 时也带上：
+部署完成后会输出管理员密钥（`RELAY_KEYS`，仅用于 `/admin` API）。客户端连接走另一套流程：
+
+1. 微信小程序 → **设置 → Relay 地址** → 填入 `wss://relay.your-domain.com/ws`
+2. 回到小程序首页，会自动向你的 Relay 申请一个新的 user key 并显示完整连接命令
+3. 把小程序显示的命令复制到电脑终端运行（命令里的 key 是小程序申请的，**不是**管理员密钥）
 
 ```bash
-codepocket --relay wss://relay.your-domain.com/ws --key YOUR_RELAY_KEY
+# 示例：key 来自小程序显示的命令，不是 RELAY_KEYS
+codepocket --relay wss://relay.your-domain.com/ws --key <小程序显示的Key>
 ```
 
 ### 其他部署方式

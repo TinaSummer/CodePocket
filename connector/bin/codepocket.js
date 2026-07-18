@@ -336,6 +336,11 @@ if (args[0] === 'status') {
 const CONNECT_ONLY = ['connect', 'c'].includes(args[0])
 const filteredArgs = CONNECT_ONLY ? args.slice(1) : args
 
+if (filteredArgs.includes('--version') || filteredArgs.includes('-v')) {
+  console.log(require('../package.json').version)
+  process.exit(0)
+}
+
 let hubUrl = process.env.CPKT_HUB_URL || process.env.HAPI_HUB_URL || 'http://127.0.0.1:3006'
 // Must match miniprogram/utils/config.local.js default — otherwise new users running
 // `codepocket --key XXX` (no --relay) silently fail to connect.

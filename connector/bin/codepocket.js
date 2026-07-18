@@ -337,7 +337,9 @@ const CONNECT_ONLY = ['connect', 'c'].includes(args[0])
 const filteredArgs = CONNECT_ONLY ? args.slice(1) : args
 
 let hubUrl = process.env.CPKT_HUB_URL || process.env.HAPI_HUB_URL || 'http://127.0.0.1:3006'
-const DEFAULT_RELAY_URL = ''
+// Must match miniprogram/utils/config.local.js default — otherwise new users running
+// `codepocket --key XXX` (no --relay) silently fail to connect.
+const DEFAULT_RELAY_URL = 'wss://bkstory.cn/ws'
 let relayUrl = process.env.RELAY_WS_URL || process.env.RELAY_URL || DEFAULT_RELAY_URL
 let relayKey = process.env.RELAY_KEY || ''
 let noHub = false

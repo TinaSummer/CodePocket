@@ -78,6 +78,7 @@
     <view wx:if="{{step === 'show_command' || step === 'connecting'}}" class="setup-reset">
       <text class="reset-btn" bindtap="onResetConnection">重新连接</text>
       <text class="reset-btn" bindtap="onResetKey">重置 Key</text>
+      <text class="reset-btn" bindtap="onShowRelayConfig">Relay 地址{{relayUrlDisplay ? '：' + relayUrlDisplay : ''}}</text>
       <text class="reset-btn troubleshoot-btn" bindtap="onShowTroubleshoot">连接问题排查</text>
     </view>
 

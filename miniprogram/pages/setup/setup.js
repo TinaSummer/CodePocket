@@ -10,10 +10,12 @@ Page({
     showTroubleshoot: false,
     showGuide: false,
     relayKey: '',
+    relayUrlDisplay: '',
   },
 
   onLoad() {
     const key = wx.getStorageSync('relay_key')
+    this._loadRelayUrlDisplay()
     if (key) {
       this.setData({ key, relayKey: key, step: 'show_command' })
       this.buildCommand(key)
@@ -21,6 +23,49 @@ Page({
     } else {
       this.register()
     }
+  },
+
+  _loadRelayUrlDisplay() {
+    const custom = wx.getStorageSync('custom_relay_url')
+    if (custom) {
+      const display = custom.length > 24 ? custom.slice(0, 22) + '...' : custom
+      this.setData({ relayUrlDisplay: display })
+    } else {
+      this.setData({ relayUrlDisplay: '' })
+    }
+  },
+
+  onShowRelayConfig() {
+    const current = wx.getStorageSync('custom_relay_url') || ''
+    wx.showModal({
+      title: 'Relay 地址',
+      editable: true,
+      content: current,
+      placeholderText: 'wss://your-domain.com/ws',
+      confirmText: '保存',
+      cancelText: '取消',
+      success: (res) => {
+        if (!res.confirm) return
+        const url = (res.content || '').trim()
+        if (!url) {
+          wx.removeStorageSync('custom_relay_url')
+          this._loadRelayUrlDisplay()
+          this.buildCommand(this.data.key)
+          wx.showToast({ title: '已恢复默认地址', icon: 'none' })
+          this.tryConnect(this.data.key)
+          return
+        }
+        if (!/^wss?:\/\/.+/.test(url)) {
+          wx.showToast({ title: '必须以 wss:// 或 ws:// 开头', icon: 'none' })
+          return
+        }
+        wx.setStorageSync('custom_relay_url', url)
+        this._loadRelayUrlDisplay()
+        this.buildCommand(this.data.key)
+        // 旧 socket 连的是旧 Relay,必须强制重连才会用新地址
+        this.tryConnect(this.data.key)
+      },
+    })
   },
 
   onResetConnection() {
@@ -61,13 +106,15 @@ Page({
   },
 
   buildCommand(key) {
-    const cmd = `npm i -g @tina_summer/codepocket && codepocket --key ${key}`
+    const customRelay = wx.getStorageSync('custom_relay_url') || ''
+    const relayFlag = customRelay ? ` --relay ${customRelay}` : ''
+    const cmd = `npm i -g @tina_summer/codepocket && codepocket --key ${key}${relayFlag}`
     this.setData({ command: cmd, relayKey: key })
   },
 
   tryConnect(key) {
     this.setData({ step: 'connecting' })
-    relay.connect((msg) => {
+    relay.forceReconnect((msg) => {
       if (msg.type === 'paired' || msg.type === 'registered' || msg.type === 'client-connected') {
         if (msg.clientToken) wx.setStorageSync('client_token', msg.clientToken)
         if (msg.sessionToken) wx.setStorageSync('session_token', msg.sessionToken)

@@ -188,6 +188,29 @@ function connect(onEvent, onConnected) {
     if (onConnectedCallback) onConnectedCallback()
     return
   }
+  _openSocket(onEvent, onConnected)
+}
+
+// Force-close any existing socket and re-establish from scratch.
+// Needed because connect() short-circuits when isConnected=true, which
+// strands users on the setup page if they change custom_relay_url after
+// a socket to the OLD relay is already open (pair-error:hub_offline loop).
+function forceReconnect(onEvent, onConnected) {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+  if (pingInterval) { clearInterval(pingInterval); pingInterval = null }
+  if (socketTask) {
+    try { socketTask.close({ fail() {} }) } catch {}
+    socketTask = null
+  }
+  isConnected = false
+  isPaired = false
+  stopped = false
+  // connect() would short-circuit on the flags above if they were true;
+  // we just set them false, so it falls through to _openSocket().
+  connect(onEvent, onConnected)
+}
+
+function _openSocket(onEvent, onConnected) {
 
   const gen = ++connectGeneration
 
@@ -557,6 +580,7 @@ function autoConnect(onEvent, onConnected) {
 module.exports = {
   getRelayUrl,
   connect,
+  forceReconnect,
   send,
   pair,
   close,

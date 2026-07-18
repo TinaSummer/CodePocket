@@ -221,6 +221,7 @@ Page({
     const key = `draft_${this.data.sessionId}`
     if (text) wx.setStorageSync(key, text)
     else wx.removeStorageSync(key)
+    if (this._reloadTimer) { clearTimeout(this._reloadTimer); this._reloadTimer = null }
   },
 
   /**
@@ -441,7 +442,14 @@ Page({
     } else if (evt.type === 'message-received' || evt.type === 'messages' ||
         evt.type === 'message' || evt.type === 'messages-consumed' ||
         evt.type === 'messages-invalidated' || evt.type === 'session-updated') {
-      this.loadMessages()
+      // Debounce: hub bursts 2-4 message-received events per reply,
+      // collapse rapid events into a single loadMessages() call.
+      // 1000ms absorbs full burst without starving (events arrive every 500ms+)
+      if (this._reloadTimer) clearTimeout(this._reloadTimer)
+      this._reloadTimer = setTimeout(() => {
+        this._reloadTimer = null
+        this.loadMessages()
+      }, 1000)
       this.setData({ compacting: false, compactProgress: 0 })
     }
   },

@@ -10,24 +10,21 @@ App({
   },
 
   onGlobalEvent(msg) {
-    // Key revoked/deleted on relay → auto-redirect to setup for re-registration
+    // Key revoked/deleted on relay → notify user, do NOT auto-re-register
     if (msg.type === 'pair-error' && msg.code === 'invalid_key') {
-      if (this._keyInvalidHandled) return
-      this._keyInvalidHandled = true
+      if (this._keyInvalidNotified) return
+      this._keyInvalidNotified = true
       wx.showModal({
         title: 'Key 已失效',
-        content: '你的连接 Key 在服务端已失效，需要重新申请。',
+        content: '你的连接 Key 已被禁用，请联系客服处理。',
         showCancel: false,
-        confirmText: '重新申请',
-        success: () => {
-          wx.reLaunch({ url: '/pages/setup/setup' })
-        },
+        confirmText: '我知道了',
       })
       return
     }
-    // Reset flag on successful pair so future invalid_key can trigger again
+    // Reset flag on successful pair so future invalid_key can notify again
     if (msg.type === 'paired') {
-      this._keyInvalidHandled = false
+      this._keyInvalidNotified = false
     }
     // Dispatch to all active pages
     const pages = getCurrentPages()

@@ -369,18 +369,34 @@ function pair(token) {
 
 let requestCounter = 0
 const pendingRequests = new Map()
+// Coalesce identical in-flight REST requests (same method+path+body) so that
+// burst callers share one round-trip. Without this, every debounced reload
+// that fires while a previous getMessages is still pending starts a second
+// request through the same WS pipe — a recipe for 60s timeouts.
+const inflightRest = new Map()
 
 function restRequest(method, path, body) {
+  // Only coalesce read-only GETs — POSTs may have side effects
+  const canCoalesce = (method === 'GET')
+  const key = canCoalesce ? `${method} ${path}` : null
+  if (key && inflightRest.has(key)) return inflightRest.get(key)
+
   const requestId = `req_${++requestCounter}_${Date.now()}`
-  return new Promise((resolve, reject) => {
+  const promise = new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       pendingRequests.delete(requestId)
+      if (key) inflightRest.delete(key)
       reject(new Error('Request timeout'))
-    }, 60000)
+    }, 20000)
 
     pendingRequests.set(requestId, { resolve, reject, timeout })
     send({ type: 'rest-request', requestId, method, path, body })
   })
+  if (key) {
+    inflightRest.set(key, promise)
+    promise.then(() => { inflightRest.delete(key) }, () => { inflightRest.delete(key) })
+  }
+  return promise
 }
 
 function sendPhoneActionResponse(actionId, accepted, result, error) {

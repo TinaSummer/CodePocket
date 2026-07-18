@@ -229,6 +229,16 @@ Page({
    * and pair tool_results with their tool-calls.
    */
   async loadMessages() {
+    // Skip-if-busy: when the relay pipe is congested, a previous load may
+    // still be in-flight (getMessages + getSessionDetail REST round-trips).
+    // Piling another request on top just makes congestion worse and triggers
+    // 60s Request timeouts. Instead mark needs-reload and re-run once on
+    // completion.
+    if (this._loadingMessages) {
+      this._needsReload = true
+      return
+    }
+    this._loadingMessages = true
     const relay = require('../../utils/relay')
     try {
       const data = await relay.getMessages(this.data.sessionId)
@@ -351,6 +361,12 @@ Page({
       }
     } catch (e) {
       console.error('[chat] loadMessages failed', e)
+    } finally {
+      this._loadingMessages = false
+      if (this._needsReload) {
+        this._needsReload = false
+        setTimeout(() => this.loadMessages(), 100)
+      }
     }
   },
 

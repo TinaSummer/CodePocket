@@ -66,17 +66,39 @@ Page({
         wx.redirectTo({ url: '/pages/setup/setup' })
         return
       }
+      this._restoreCache()
       this.loadSessions()
     }
   },
 
+  // ── Sessions cache (same stale-while-revalidate pattern as chat's msg_cache) ──
+
+  _restoreCache() {
+    try {
+      const cached = wx.getStorageSync('sessions_cache')
+      if (cached && Array.isArray(cached.sessions) && cached.sessions.length > 0) {
+        this.setData({ sessions: cached.sessions, loading: false })
+      }
+    } catch {}
+  },
+
+  _saveCache(sessions) {
+    try {
+      wx.setStorageSync('sessions_cache', { sessions, savedAt: Date.now() })
+    } catch {}
+  },
+
   async loadSessions() {
     const relay = require('../../utils/relay')
+    // Cold start: WS not ready yet. Don't bounce to setup — cached list is
+    // already rendered; the background pair triggers reload via onWsEvent.
     if (!relay.isReady()) {
-      wx.redirectTo({ url: '/pages/setup/setup' })
+      relay.autoConnect((msg) => this.onWsEvent(msg))
+      if (!this.data.sessions.length) this.setData({ loading: true })
       return
     }
-    this.setData({ loading: true, hubOffline: false })
+    // Keep showing cached content instead of flashing a spinner over it
+    this.setData({ loading: this.data.sessions.length === 0, hubOffline: false })
     try {
       const data = await relay.getSessions()
       const raw = data.sessions || []
@@ -86,6 +108,7 @@ Page({
         return mapped
       })
       this.setData({ sessions, loading: false })
+      this._saveCache(sessions)
       this._cleanMessageCaches(raw)
     } catch (e) {
       console.error('loadSessions failed', e)
@@ -103,16 +126,34 @@ Page({
 
   onShow() {
     if (!MOCK) {
-      const relay = require('../../utils/relay')
-      if (!relay.isReady()) {
+      // Redirect only when there's genuinely no key (never paired / revoked);
+      // a not-yet-ready socket is a normal cold-start state, not a setup need.
+      if (!wx.getStorageSync('relay_key')) {
         wx.redirectTo({ url: '/pages/setup/setup' })
-      } else {
-        this.loadSessions()
+        return
       }
+      this.loadSessions()
     }
   },
 
   onWsEvent(msg) {
+    // Background pair just completed (cold start) — fetch now.
+    if (msg.type === 'paired') {
+      this.loadSessions()
+      return
+    }
+    if (msg.type === 'pair-error') {
+      // Computer not connected / throttled — show the offline hint instead
+      // of an endless spinner over an empty list.
+      if (msg.code === 'hub_offline' || msg.code === 'rate_limited') {
+        this.setData({ loading: false, hubOffline: true })
+      }
+      // Key revoked (relay.js already cleared it) — setup re-registers.
+      if (msg.code === 'invalid_key') {
+        wx.redirectTo({ url: '/pages/setup/setup' })
+      }
+      return
+    }
     if (msg.type !== 'sse-event' || !msg.event) return
     const evt = msg.event
     if (evt.type === 'session-updated' || evt.type === 'message-received') {

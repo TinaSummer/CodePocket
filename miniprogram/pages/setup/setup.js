@@ -52,7 +52,7 @@ Page({
           this._loadRelayUrlDisplay()
           this.buildCommand(this.data.key)
           wx.showToast({ title: '已恢复默认地址', icon: 'none' })
-          this.tryConnect(this.data.key)
+          this.tryConnect(this.data.key, true)
           return
         }
         if (!/^wss?:\/\/.+/.test(url)) {
@@ -63,7 +63,7 @@ Page({
         this._loadRelayUrlDisplay()
         this.buildCommand(this.data.key)
         // 旧 socket 连的是旧 Relay,必须强制重连才会用新地址
-        this.tryConnect(this.data.key)
+        this.tryConnect(this.data.key, true)
       },
     })
   },
@@ -112,16 +112,14 @@ Page({
     this.setData({ command: cmd, relayKey: key })
   },
 
-  tryConnect(key) {
+  tryConnect(key, force = false) {
     this.setData({ step: 'connecting' })
-    relay.forceReconnect((msg) => {
+    const onMsg = (msg) => {
       if (msg.type === 'paired' || msg.type === 'registered' || msg.type === 'client-connected') {
         if (msg.clientToken) wx.setStorageSync('client_token', msg.clientToken)
         if (msg.sessionToken) wx.setStorageSync('session_token', msg.sessionToken)
         this.setData({ step: 'connected' })
-        setTimeout(() => {
-          wx.switchTab({ url: '/pages/index/index' })
-        }, 600)
+        wx.switchTab({ url: '/pages/index/index' })
       }
       if (msg.type === 'pair-error') {
         const code = msg.code || 'unknown'
@@ -139,7 +137,12 @@ Page({
           this.setData({ error: msg.error || '配对失败，请重试', step: 'show_command' })
         }
       }
-    })
+    }
+    // Reuse the connection app.onLaunch already started (or an in-flight
+    // handshake); a full force-reconnect (fresh TLS/WS) is only needed when
+    // the relay URL just changed.
+    if (force) relay.forceReconnect(onMsg)
+    else relay.connect(onMsg)
     const clientToken = wx.getStorageSync('client_token') || ''
     const sessionToken = wx.getStorageSync('session_token') || ''
     relay.send({ type: 'pair', key: this.data.key, token: '', clientToken, sessionToken })

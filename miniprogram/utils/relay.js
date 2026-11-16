@@ -18,6 +18,7 @@ let onConnectedCallback = null
 let reconnectTimer = null
 let reconnectAttempts = 0
 let stopped = false        // true when we intentionally stop retrying (rate_limited / invalid_key)
+let socketOpening = false  // true between wx.connectSocket and onOpen/onClose/onError
 const MAX_RECONNECT = 20
 const pendingQueue = []
 let onPhoneActionCallback = null
@@ -188,6 +189,10 @@ function connect(onEvent, onConnected) {
     if (onConnectedCallback) onConnectedCallback()
     return
   }
+  // Handshake already in flight (app.onLaunch connected on cold start) —
+  // swap callbacks instead of tearing the socket down and redoing TLS/WS.
+  // Queued messages (e.g. a pair) flush in that socket's onOpen as usual.
+  if (socketOpening && socketTask) return
   _openSocket(onEvent, onConnected)
 }
 
@@ -205,6 +210,7 @@ function forceReconnect(onEvent, onConnected) {
   isConnected = false
   isPaired = false
   stopped = false
+  socketOpening = false
   // connect() would short-circuit on the flags above if they were true;
   // we just set them false, so it falls through to _openSocket().
   connect(onEvent, onConnected)
@@ -231,10 +237,12 @@ function _openSocket(onEvent, onConnected) {
   }
 
   socketTask = wx.connectSocket({ url })
+  socketOpening = true
 
   // Per-socket handlers (not global) — prevents handler accumulation
   socketTask.onOpen(() => {
     if (gen !== connectGeneration) return  // Stale handler
+    socketOpening = false
     isConnected = true
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
@@ -323,6 +331,7 @@ function _openSocket(onEvent, onConnected) {
 
   socketTask.onClose(() => {
     if (gen !== connectGeneration) return  // Stale handler
+    socketOpening = false
     isConnected = false
     isPaired = false
     if (pingInterval) { clearInterval(pingInterval); pingInterval = null }
@@ -331,6 +340,7 @@ function _openSocket(onEvent, onConnected) {
 
   socketTask.onError(() => {
     if (gen !== connectGeneration) return  // Stale handler
+    socketOpening = false
     isConnected = false
     isPaired = false
     if (pingInterval) { clearInterval(pingInterval); pingInterval = null }

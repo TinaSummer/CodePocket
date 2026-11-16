@@ -68,9 +68,33 @@ for asset in cpkt-hub cpkt-hub-linux cpkt-hub.exe; do
   fi
 done
 if [[ ${#missing[@]} -gt 0 ]]; then
-  log_info "  gh release download: ${missing[*]}"
-  gh release download --repo TinaSummer/CodePocket \
-    --dir "$CACHE" --clobber "${missing[@]}"
+  if command -v gh >/dev/null 2>&1; then
+    log_info "  gh release download: ${missing[*]}"
+    gh release download --repo TinaSummer/CodePocket \
+      --dir "$CACHE" --clobber "${missing[@]}"
+  else
+    # gh 未安装 / GitHub 直连不通 — 从 npm 已发布的上一版平台子包提取二进制
+    # (子包只含二进制,与上次发布时完全一致;npm registry 在受限网络下通常可达)
+    log_info "  gh 不可用,从 npm 上一版子包提取: ${missing[*]}"
+    NPM_PREV=$(npm view @tina_summer/codepocket dist-tags.latest 2>/dev/null || true)
+    [[ -z "$NPM_PREV" ]] && { log_error "  无法获取 npm 上一版本号"; exit 1; }
+    log_info "  提取来源版本: $NPM_PREV"
+    npm_fetch_bin() {  # $1=subpackage $2=output-file
+      local tmpdir
+      tmpdir=$(mktemp -d)
+      (cd "$tmpdir" && npm pack "@tina_summer/$1@$NPM_PREV" --silent >/dev/null 2>&1 \
+        && tar xzf *.tgz && cp package/bin/* "$CACHE/$2") \
+        || { log_error "  npm pack $1 失败"; exit 1; }
+      rm -rf "$tmpdir"
+    }
+    for asset in "${missing[@]}"; do
+      case "$asset" in
+        cpkt-hub)        npm_fetch_bin codepocket-darwin-arm64 "$asset" ;;
+        cpkt-hub-linux)  npm_fetch_bin codepocket-linux-x64 "$asset" ;;
+        cpkt-hub.exe)    npm_fetch_bin codepocket-win32-x64 "$asset" ;;
+      esac
+    done
+  fi
 fi
 chmod +x "$CACHE/cpkt-hub" "$CACHE/cpkt-hub-linux"
 

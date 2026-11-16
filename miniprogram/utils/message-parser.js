@@ -342,7 +342,21 @@ function createParser() {
         return null
       }
 
-      if (content.type === 'event') return null
+      // Process crash / fatal events must be VISIBLE — dropping them leaves the
+      // last visible message as the user's, which the chat page's heuristic
+      // reads as "still thinking" → spinner forever with no reply.
+      if (content.type === 'event') {
+        const evt = content.data || {}
+        const msgText = typeof evt.message === 'string' ? evt.message : ''
+        if (/Process exited|unexpectedly|fatal/i.test(msgText)) {
+          return {
+            id: m.id, role: 'agent', timeStr: formatTime(m.createdAt),
+            isError: true,
+            blocks: [{ type: 'text', text: `⚠️ ${msgText}`, segments: [] }],
+          }
+        }
+        return null
+      }
 
       const text = JSON.stringify(content)
       return {

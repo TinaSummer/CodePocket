@@ -1045,6 +1045,17 @@ async function handleResumeSession(requestId, sessionId) {
       claudeSessionId = findClaudeSessionFile(directory)
       log(`[DEBUG:resume] claudeSessionId from file scan: ${claudeSessionId || 'NOT FOUND'}`)
     }
+    // Stale resume target: the conversation file was deleted (claude retention
+    // cleanup) — launching with --resume crashes claude instantly with
+    // "No conversation found" (exit 1) and the phone spins "thinking" forever.
+    if (claudeSessionId) {
+      const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude')
+      const convFile = path.join(claudeConfigDir, 'projects', encodeProjectPath(directory), `${claudeSessionId}.jsonl`)
+      if (!fs.existsSync(convFile)) {
+        log(`[DEBUG:resume] conversation file missing (${claudeSessionId}) — starting fresh instead of --resume`)
+        claudeSessionId = null
+      }
+    }
     const spawnArgs = ['claude', '--codepocket-starting-mode', 'remote']
     if (claudeSessionId) {
       spawnArgs.push('--resume', claudeSessionId)

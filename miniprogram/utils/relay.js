@@ -158,11 +158,18 @@ function decryptMessage(msg) {
     const nonce = b64ToU8(msg.enc.n)
     const cipher = b64ToU8(msg.enc.c)
     const plain = nacl.secretbox.open(cipher, nonce, e2eSharedKey)
-    if (!plain) return msg
+    if (!plain) {
+      // Encrypted for a different device's key (multi-device) or key rotated —
+      // surface it instead of silently dropping fields (invisible breakage).
+      console.error('[E2E] 解密失败 type=' + msg.type + ' requestId=' + (msg.requestId || '?'))
+      return msg
+    }
     const content = JSON.parse(u8ToStr(plain))
     delete msg.enc
     for (const k in content) msg[k] = content[k]
-  } catch {}
+  } catch (e) {
+    console.error('[E2E] 解密异常:', e.message)
+  }
   return msg
 }
 

@@ -101,7 +101,12 @@ Page({
     this.setData({ loading: this.data.sessions.length === 0, hubOffline: false })
     try {
       const data = await relay.getSessions()
-      const raw = data.sessions || []
+      // Empty/undecryptable response — keep current list
+      if (!data || !Array.isArray(data.sessions)) {
+        this.setData({ loading: false })
+        return
+      }
+      const raw = data.sessions
       const sessions = raw.map(s => {
         const mapped = mapSession(s)
         mapped._selected = this.data.editing && this.data.selectedIds.indexOf(mapped.id) >= 0

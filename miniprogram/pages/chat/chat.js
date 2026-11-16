@@ -131,9 +131,11 @@ Page({
     if (deltaY !== undefined && deltaY < -50) {
       this._isNearBottom = false
     }
-    // If scrolled very close to bottom, re-enable auto-scroll
+    // Only genuinely pinned to the bottom re-enables auto-scroll.
+    // 200px was too generous — reading a message near the bottom kept
+    // counting as "at bottom" and every reload yanked the view down.
     const viewportHeight = this._viewportHeight
-    if (viewportHeight && scrollTop + viewportHeight >= scrollHeight - 200) {
+    if (viewportHeight && scrollTop + viewportHeight >= scrollHeight - 60) {
       this._isNearBottom = true
     }
     // Clear stale scrollToId so setData doesn't re-trigger it
@@ -206,6 +208,9 @@ Page({
 
     relay.autoConnect((msg) => this.onWsEvent(msg))
     relay.onPhoneAction((msg) => this.onPhoneAction(msg))
+    // Re-measure viewport — keyboard show/hide during previous session
+    // invalidates the cached height and misfires near-bottom detection
+    this._measureViewport()
     if (relay.isConnected()) this.loadMessages()
   },
 
@@ -242,7 +247,9 @@ Page({
     const relay = require('../../utils/relay')
     try {
       const data = await relay.getMessages(this.data.sessionId)
-      const raw = data.messages || []
+      // Empty/undecryptable response — keep current view, don't wipe messages
+      if (!data || !Array.isArray(data.messages)) return
+      const raw = data.messages
       this._hasMoreMessages = !!data.page?.hasMore
       this._nextBeforeSeq = data.page?.nextBeforeSeq || null
       // Reset tool-call tracking before batch parse
@@ -440,8 +447,25 @@ Page({
 
   // ── WebSocket events ──
 
+  // Debounce: hub bursts 2-4 message-received events per reply (and with
+  // multi-device E2E fan-out each event arrives once per paired device),
+  // collapse rapid events into a single loadMessages() call.
+  _scheduleReload() {
+    if (this._reloadTimer) clearTimeout(this._reloadTimer)
+    this._reloadTimer = setTimeout(() => {
+      this._reloadTimer = null
+      this.loadMessages()
+    }, 1000)
+  },
+
   onWsEvent(msg) {
-    if (msg.type !== 'sse-event' || !msg.event) return
+    if (msg.type !== 'sse-event') return
+    // Encrypted for another device (multi-device fan-out) — we can't read it,
+    // but it's still a "something changed" signal, so refresh anyway.
+    if (!msg.event) {
+      this._scheduleReload()
+      return
+    }
     const evt = msg.event
 
     // Only reload for events related to current session
@@ -458,14 +482,7 @@ Page({
     } else if (evt.type === 'message-received' || evt.type === 'messages' ||
         evt.type === 'message' || evt.type === 'messages-consumed' ||
         evt.type === 'messages-invalidated' || evt.type === 'session-updated') {
-      // Debounce: hub bursts 2-4 message-received events per reply,
-      // collapse rapid events into a single loadMessages() call.
-      // 1000ms absorbs full burst without starving (events arrive every 500ms+)
-      if (this._reloadTimer) clearTimeout(this._reloadTimer)
-      this._reloadTimer = setTimeout(() => {
-        this._reloadTimer = null
-        this.loadMessages()
-      }, 1000)
+      this._scheduleReload()
       this.setData({ compacting: false, compactProgress: 0 })
     }
   },

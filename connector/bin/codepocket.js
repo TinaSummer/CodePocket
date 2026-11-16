@@ -550,10 +550,16 @@ async function startSSE() {
 // The relay only forwards e2ePubKey + opaque `enc` envelopes; it cannot decrypt.
 // Nonces are counter-based with a direction tag to avoid reuse across directions
 // under the same shared key: connector uses 0xFF prefix, phone uses 0x00.
+//
+// MULTI-CLIENT: several devices (phone 体验版/正式版, DevTools) may pair with the
+// same key. Each client has its own keypair, so we keep ONE shared key PER client
+// pubkey. A single global key would let only the last-paired client decrypt —
+// every other device silently received `data: undefined`.
 
-let e2eKeypair = null        // { publicKey, secretKey } Uint8Arrays (X25519)
-let e2eSharedKey = null      // Uint8Array(32), set when peer pubkey arrives
-let e2eNonceCounter = 0
+let e2eKeypair = null                       // { publicKey, secretKey } Uint8Arrays (X25519)
+const e2eClientKeys = new Map()             // clientPubKeyB64 -> Uint8Array(32) shared key
+const e2eNonceCounters = new Map()          // clientPubKeyB64 -> counter (connector→phone)
+const e2ePeerByRequest = new Map()          // requestId -> clientPubKeyB64 (route responses)
 
 function ensureE2EKeypair() {
   if (e2eKeypair) return e2eKeypair
@@ -571,58 +577,66 @@ function setPeerE2EPubKey(peerPubKeyB64) {
   try {
     const peerPub = Buffer.from(peerPubKeyB64, 'base64')
     if (peerPub.length !== 32) return
-    e2eSharedKey = nacl.box.before(peerPub, ensureE2EKeypair().secretKey)
-    e2eNonceCounter = 0
-    log('[codepocket] ✓ E2E 加密通道已建立')
+    e2eClientKeys.set(peerPubKeyB64, nacl.box.before(peerPub, ensureE2EKeypair().secretKey))
+    log(`[codepocket] ✓ E2E 加密通道已建立 (client ${peerPubKeyB64.slice(0, 6)}..., 共 ${e2eClientKeys.size} 个客户端)`)
   } catch (e) {
     log(`[codepocket] E2E 密钥协商失败: ${e.message}`)
   }
 }
 
-function nextNonce() {
-  e2eNonceCounter++
+function nextNonce(pubKeyB64) {
+  const c = (e2eNonceCounters.get(pubKeyB64) || 0) + 1
+  e2eNonceCounters.set(pubKeyB64, c)
   const n = new Uint8Array(24)
   n[0] = 0xFF  // connector→phone direction tag
-  let c = e2eNonceCounter
-  for (let i = 6; i >= 1; i--) { n[i] = c & 0xff; c = Math.floor(c / 256) }
+  let rest = c
+  for (let i = 6; i >= 1; i--) { n[i] = rest & 0xff; rest = Math.floor(rest / 256) }
   return n
 }
 
-function e2eEncrypt(obj) {
-  if (!e2eSharedKey) return undefined
+// Encrypt for ONE specific client. Unknown peer → undefined (caller sends plaintext).
+function e2eEncryptFor(pubKeyB64, obj) {
+  const key = e2eClientKeys.get(pubKeyB64)
+  if (!key) return undefined
   try {
     const msgBytes = Buffer.from(JSON.stringify(obj), 'utf8')
-    const nonce = nextNonce()
-    const cipher = nacl.secretbox(msgBytes, nonce, e2eSharedKey)
+    const nonce = nextNonce(pubKeyB64)
+    const cipher = nacl.secretbox(msgBytes, nonce, key)
     if (!cipher) return undefined
     return { n: Buffer.from(nonce).toString('base64'), c: Buffer.from(cipher).toString('base64') }
   } catch { return undefined }
 }
 
+// Inbound may come from ANY connected client — try every known key.
+// Returns { content, from: clientPubKeyB64 } or undefined.
 function e2eDecrypt(envelope) {
   if (!envelope || typeof envelope !== 'object') return undefined
   if (typeof envelope.n !== 'string' || typeof envelope.c !== 'string') return undefined
-  if (!e2eSharedKey) return undefined
+  if (e2eClientKeys.size === 0) return undefined
   try {
     const nonce = new Uint8Array(Buffer.from(envelope.n, 'base64'))
     const cipher = new Uint8Array(Buffer.from(envelope.c, 'base64'))
-    const plain = nacl.secretbox.open(cipher, nonce, e2eSharedKey)
-    if (!plain) return undefined
-    return JSON.parse(Buffer.from(plain).toString('utf8'))
-  } catch { return undefined }
+    for (const [pub, key] of e2eClientKeys) {
+      const plain = nacl.secretbox.open(cipher, nonce, key)
+      if (plain) return { content: JSON.parse(Buffer.from(plain).toString('utf8')), from: pub }
+    }
+  } catch {}
+  return undefined
 }
 
 // Pack a message for sending: moves sensitive fields into an `enc` envelope.
 // Routing fields (type, requestId, actionId, success, status, ok) stay plaintext.
-function encryptMessage(msg) {
-  if (!e2eSharedKey) return msg
+// peerPubB64: respond to a specific client. undefined → single-client fallback
+// (broadcast callers use sendToRelay which fans out per client instead).
+function encryptMessage(msg, peerPubB64) {
+  if (e2eClientKeys.size === 0) return msg
   const routing = ['type', 'requestId', 'actionId', 'success', 'status', 'ok', 'reconnected']
   const content = {}
   for (const [k, v] of Object.entries(msg)) {
-    if (!routing.includes(k)) content[k] = v
+    if (!routing.includes(k) && k !== '_e2eFrom') content[k] = v
   }
   if (Object.keys(content).length === 0) return msg
-  const enc = e2eEncrypt(content)
+  const enc = e2eEncryptFor(peerPubB64, content)
   if (!enc) return msg
   const out = { type: msg.type }
   for (const k of routing) if (k in msg) out[k] = msg[k]
@@ -630,15 +644,28 @@ function encryptMessage(msg) {
   return out
 }
 
-// Unpack a received message: merges decrypted content back from `enc`.
+// Unpack a received message: merges decrypted content back from `enc`,
+// remembering which client sent it so the response can be encrypted for them.
 function decryptMessage(msg) {
-  if (!msg || !msg.enc || !e2eSharedKey) return msg
-  const content = e2eDecrypt(msg.enc)
-  if (content) {
+  if (!msg || !msg.enc || e2eClientKeys.size === 0) return msg
+  const r = e2eDecrypt(msg.enc)
+  if (r) {
     delete msg.enc
-    Object.assign(msg, content)
+    Object.assign(msg, r.content)
+    msg._e2eFrom = r.from
+    if (msg.requestId) e2ePeerByRequest.set(msg.requestId, r.from)
+  } else {
+    log(`[E2E] 解密失败(未知客户端密钥) requestId=${msg.requestId || '?'}`)
   }
   return msg
+}
+
+// Pop the originating client for a request (one-shot; deleted after read).
+function takePeer(requestId) {
+  if (!requestId) return undefined
+  const p = e2ePeerByRequest.get(requestId)
+  e2ePeerByRequest.delete(requestId)
+  return p
 }
 
 // ── Relay ──
@@ -758,22 +785,36 @@ function connectRelay() {
   relayWs.on('error', () => { relayWs?.close() })
 }
 
-function sendToRelay(msg) {
-  if (relayWs?.readyState === WebSocket.OPEN) relayWs.send(JSON.stringify(encryptMessage(msg)))
+function sendToRelay(msg, peerPubB64) {
+  if (relayWs?.readyState !== WebSocket.OPEN) return
+  if (peerPubB64 !== undefined) {
+    // Routed response — encrypt for the requesting client only
+    relayWs.send(JSON.stringify(encryptMessage(msg, peerPubB64)))
+  } else if (e2eClientKeys.size <= 1) {
+    const pub = e2eClientKeys.size ? e2eClientKeys.keys().next().value : undefined
+    relayWs.send(JSON.stringify(encryptMessage(msg, pub)))
+  } else {
+    // Broadcast (sse-event / phone-action): one copy per client key so every
+    // paired device can decrypt its own; others ignore the opaque copy.
+    for (const pub of e2eClientKeys.keys()) {
+      relayWs.send(JSON.stringify(encryptMessage(msg, pub)))
+    }
+  }
 }
 
 function sendSpawnResult(requestId, sessionId, error) {
+  const peer = takePeer(requestId)
   const msg = error
     ? { type: 'spawn-session-result', requestId, success: false, error }
     : { type: 'spawn-session-result', requestId, success: true, sessionId }
   // Retry sending if relay connection is temporarily down
   if (relayWs?.readyState === WebSocket.OPEN) {
-    relayWs.send(JSON.stringify(encryptMessage(msg)))
+    relayWs.send(JSON.stringify(encryptMessage(msg, peer)))
   } else {
     log(`[codepocket] Relay not open, retrying spawn result in 2s...`)
     setTimeout(() => {
       if (relayWs?.readyState === WebSocket.OPEN) {
-        relayWs.send(JSON.stringify(encryptMessage(msg)))
+        relayWs.send(JSON.stringify(encryptMessage(msg, peer)))
       } else {
         log(`[codepocket] Failed to send spawn result, relay still down`)
       }
@@ -791,9 +832,10 @@ async function doForwardToHub(requestId, method, p, body) {
 }
 
 async function forwardToHub(requestId, method, p, body) {
+  const peer = takePeer(requestId)
   // Only allow proxying to /api/ paths
   if (!p || !p.startsWith('/api/')) {
-    sendToRelay({ type: 'rest-response', requestId, status: 403, data: { error: 'Forbidden path' } })
+    sendToRelay({ type: 'rest-response', requestId, status: 403, data: { error: 'Forbidden path' } }, peer)
     return
   }
   try {
@@ -806,22 +848,23 @@ async function forwardToHub(requestId, method, p, body) {
       } catch {}
     }
     const data = await res.json().catch(() => ({}))
-    sendToRelay({ type: 'rest-response', requestId, status: res.status, data })
+    sendToRelay({ type: 'rest-response', requestId, status: res.status, data }, peer)
   } catch (err) {
-    sendToRelay({ type: 'rest-response', requestId, status: 502, data: { error: err.message } })
+    sendToRelay({ type: 'rest-response', requestId, status: 502, data: { error: err.message } }, peer)
   }
 }
 
 async function handleAuthRequest(requestId, accessToken) {
+  const peer = takePeer(requestId)
   try {
     const res = await fetch(`${hubUrl}/api/auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ accessToken }),
     })
-    sendToRelay({ type: 'auth-response', requestId, ok: res.ok, data: await res.json() })
+    sendToRelay({ type: 'auth-response', requestId, ok: res.ok, data: await res.json() }, peer)
   } catch (err) {
-    sendToRelay({ type: 'auth-response', requestId, ok: false, data: { error: err.message } })
+    sendToRelay({ type: 'auth-response', requestId, ok: false, data: { error: err.message } }, peer)
   }
 }
 
@@ -832,12 +875,12 @@ async function handleSpawnSession(requestId, directory) {
 
   if (!hubBin) {
     log(`[DEBUG:spawn] FAIL: hubBin is null`)
-    sendToRelay({ type: 'spawn-session-result', requestId, success: false, error: 'Hub binary not found' })
+    sendSpawnResult(requestId, null, 'Hub binary not found')
     return
   }
   if (!directory || typeof directory !== 'string') {
     log(`[DEBUG:spawn] FAIL: directory invalid`)
-    sendToRelay({ type: 'spawn-session-result', requestId, success: false, error: 'Directory is required' })
+    sendSpawnResult(requestId, null, 'Directory is required')
     return
   }
 
@@ -849,12 +892,12 @@ async function handleSpawnSession(requestId, directory) {
   const home = os.homedir()
   if (!absDir.startsWith(home)) {
     log(`[DEBUG:spawn] FAIL: directory outside home: ${absDir}`)
-    sendToRelay({ type: 'spawn-session-result', requestId, success: false, error: 'Access denied: directory outside home' })
+    sendSpawnResult(requestId, null, 'Access denied: directory outside home')
     return
   }
   if (!fs.existsSync(absDir) || !fs.statSync(absDir).isDirectory()) {
     log(`[DEBUG:spawn] FAIL: directory does not exist: ${absDir}`)
-    sendToRelay({ type: 'spawn-session-result', requestId, success: false, error: 'Directory does not exist' })
+    sendSpawnResult(requestId, null, 'Directory does not exist')
     return
   }
 
@@ -961,13 +1004,14 @@ async function handleSpawnSession(requestId, directory) {
 async function handleResumeSession(requestId, sessionId) {
   log(`[DEBUG:resume] === START resume-session ===`)
   log(`[DEBUG:resume] requestId=${requestId}, sessionId=${sessionId}`)
+  const peer = takePeer(requestId)
 
   if (!hubBin) {
-    sendToRelay({ type: 'resume-session-result', requestId, success: false, error: 'Hub binary not found' })
+    sendToRelay({ type: 'resume-session-result', requestId, success: false, error: 'Hub binary not found' }, peer)
     return
   }
   if (!sessionId) {
-    sendToRelay({ type: 'resume-session-result', requestId, success: false, error: 'Session ID is required' })
+    sendToRelay({ type: 'resume-session-result', requestId, success: false, error: 'Session ID is required' }, peer)
     return
   }
 
@@ -984,14 +1028,14 @@ async function handleResumeSession(requestId, sessionId) {
       })
     }
     if (!res.ok) {
-      sendToRelay({ type: 'resume-session-result', requestId, success: false, error: `Session not found (${res.status})` })
+      sendToRelay({ type: 'resume-session-result', requestId, success: false, error: `Session not found (${res.status})` }, peer)
       return
     }
     const data = await res.json()
     const session = data.session || data
     const directory = (session.metadata?.path || '').replace(/^~/, os.homedir())
     if (!directory) {
-      sendToRelay({ type: 'resume-session-result', requestId, success: false, error: 'Session has no working directory' })
+      sendToRelay({ type: 'resume-session-result', requestId, success: false, error: 'Session has no working directory' }, peer)
       return
     }
 
@@ -1103,34 +1147,35 @@ async function handleResumeSession(requestId, sessionId) {
     if (newSessionId) {
       // Don't delete old session — mini-program needs it for message history
       log(`[DEBUG:resume] RESULT: new session=${newSessionId}, old session=${sessionId} preserved for history`)
-      sendToRelay({ type: 'resume-session-result', requestId, success: true, sessionId: newSessionId, oldSessionId: sessionId })
+      sendToRelay({ type: 'resume-session-result', requestId, success: true, sessionId: newSessionId, oldSessionId: sessionId }, peer)
     } else {
       log(`[DEBUG:resume] RESULT: no new session found after 30 polls`)
-      sendToRelay({ type: 'resume-session-result', requestId, success: true, sessionId: null, warning: 'Session resuming' })
+      sendToRelay({ type: 'resume-session-result', requestId, success: true, sessionId: null, warning: 'Session resuming' }, peer)
     }
   } catch (err) {
     log(`[DEBUG:resume] EXCEPTION: ${err.message}`)
-    sendToRelay({ type: 'resume-session-result', requestId, success: false, error: err.message })
+    sendToRelay({ type: 'resume-session-result', requestId, success: false, error: err.message }, peer)
   }
 }
 
 function handleListDir(requestId, dirPath) {
+  const peer = takePeer(requestId)
   try {
     const home = os.homedir()
     const resolved = (dirPath || '~').replace(/^~/, home)
     const abs = path.resolve(resolved)
     // Only allow listing under home directory
     if (!abs.startsWith(home)) {
-      sendToRelay({ type: 'list-dir-result', requestId, error: 'Access denied: directory outside home' })
+      sendToRelay({ type: 'list-dir-result', requestId, error: 'Access denied: directory outside home' }, peer)
       return
     }
     const entries = fs.readdirSync(abs, { withFileTypes: true })
       .filter(d => d.isDirectory())
       .map(d => ({ name: d.name, path: path.join(abs, d.name) }))
       .sort((a, b) => a.name.localeCompare(b.name))
-    sendToRelay({ type: 'list-dir-result', requestId, path: abs, entries })
+    sendToRelay({ type: 'list-dir-result', requestId, path: abs, entries }, peer)
   } catch (err) {
-    sendToRelay({ type: 'list-dir-result', requestId, error: err.message })
+    sendToRelay({ type: 'list-dir-result', requestId, error: err.message }, peer)
   }
 }
 

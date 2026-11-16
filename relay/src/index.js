@@ -146,6 +146,17 @@ function getHub(ws) {
   return hubs.get(s.hubToken) || null
 }
 
+// A hub is alive only if its socket is OPEN and it checked in recently
+// (connector pings every 25s; 60s tolerance = 2 missed pings). Zombie hub
+// entries (dead TCP that never fired close) otherwise swallow phone
+// requests silently until the 20s client timeout.
+function hubAlive(hub) {
+  if (!hub) return false
+  const raw = hub.ws?.raw ?? hub.ws
+  const socketOpen = (raw && typeof raw.readyState === 'number') ? raw.readyState === 1 : true
+  return socketOpen && (Date.now() - hub.lastSeen) <= 60000
+}
+
 function getE2EPubKey(ws) {
   return connState.get(ws)?.e2ePubKey || ''
 }
@@ -166,10 +177,11 @@ function findHubByClient(ws) {
     return null
   }
   const hub = hubs.get(client.hubToken)
-  if (!hub) {
-    console.log(`[relay] findHubByClient: hub not found for ${client.hubToken.slice(0, 8)} hubs=${hubs.size}`)
+  if (!hubAlive(hub)) {
+    console.log(`[relay] findHubByClient: hub ${client.hubToken.slice(0, 8)} stale/dead — treating as offline`)
+    return null
   }
-  return hub || null
+  return hub
 }
 
 function cleanupHub(token) {
@@ -186,6 +198,15 @@ function cleanupHub(token) {
 // Periodic cleanup
 setInterval(() => {
   const now = Date.now()
+  // Sweep zombie hubs: connector pings every 25s, so anything silent for
+  // 90s is a dead process whose TCP never closed — phone requests routed
+  // there would hang until the client timeout.
+  for (const [st, h] of hubs) {
+    if (now - h.lastSeen > 90000) {
+      console.log(`[relay] sweep: removing stale hub ${st.slice(0, 8)} (silent ${Math.round((now - h.lastSeen) / 1000)}s)`)
+      cleanupHub(st)
+    }
+  }
   for (const [token, id] of pendingPairs) {
     const h = hubs.get(id)
     if (!h || now > h.tokenExpires) { pendingPairs.delete(token); if (h) h.token = '' }
@@ -469,8 +490,20 @@ app.get('/ws', upgradeWebSocket(() => ({
     const state = connState.get(ws)
     if (!state) return
 
+    // Any message from a hub (its 25s ping included) refreshes liveness
+    if (state.hubToken) {
+      const h = hubs.get(state.hubToken)
+      if (h) h.lastSeen = Date.now()
+    }
+
     try {
     switch (msg.type) {
+      case 'ping': {
+        // App-level keepalive from phone/connector — reply so peers can
+        // detect half-dead connections instead of buffering into a void.
+        try { ws.send(JSON.stringify({ type: 'pong' })) } catch {}
+        return
+      }
       case 'register': {
         if (!isValidKey(msg.key)) {
           ws.send(JSON.stringify({ type: 'register-error', error: 'Invalid key' }))
@@ -567,12 +600,15 @@ app.get('/ws', upgradeWebSocket(() => ({
           try { hub.ws.send(JSON.stringify({ type: 'client-connected', clientE2EPubKey: state.e2ePubKey, reconnected: true })) } catch {}
           return
         }
-        // 4. Pair by key: find hub with matching keyId
+        // 4. Pair by key: freshest ALIVE hub wins (old code took the oldest
+        // Map entry, which after a connector restart is a zombie that eats
+        // every request until TCP gives up minutes later)
         const pairKey = String(msg.key || '').trim()
         if (pairKey && isValidKey(pairKey)) {
           let matchedHub = null
           for (const [, hub] of hubs) {
-            if (hub.keyId === pairKey) { matchedHub = hub; break }
+            if (hub.keyId !== pairKey || !hubAlive(hub)) continue
+            if (!matchedHub || hub.lastSeen > matchedHub.lastSeen) matchedHub = hub
           }
           if (matchedHub) {
             clients.set(ct, { ws, hubToken: matchedHub.sessionToken, clientToken: ct })

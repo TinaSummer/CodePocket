@@ -405,6 +405,7 @@ if (args[0] === 'start') {
 let jwt = ''
 let relayWs = null
 let relayPingInterval = null
+let relayLastPong = 0
 let hubBin = findHubBin()
 let relayConnectFailures = 0
 
@@ -699,16 +700,30 @@ function connectRelay() {
       sessionToken: savedSession?.sessionToken || undefined,
       e2ePubKey: getE2EPubKeyB64(),
     }))
+    // Pong watchdog: relay replies to app-level ping. If it goes silent
+    // (zombie TCP after a relay restart / NAT drop), close() alone may never
+    // fire — force a reconnect instead of buffering into the void forever.
+    relayLastPong = Date.now()
     relayPingInterval = setInterval(() => {
-      if (relayWs?.readyState === WebSocket.OPEN) {
-        relayWs.send(JSON.stringify({ type: 'ping' }))
+      if (relayWs?.readyState !== WebSocket.OPEN) return
+      if (Date.now() - relayLastPong > 75000) {
+        log('[codepocket] ⚠ Relay 75s 无 pong,强制重连')
+        try { relayWs.removeAllListeners() } catch {}
+        try { relayWs.close() } catch {}
+        relayWs = null
+        setTimeout(connectRelay, 1000)
+        return
       }
+      relayWs.send(JSON.stringify({ type: 'ping' }))
     }, 25000)
   })
 
   relayWs.on('message', (raw) => {
+    // Any traffic proves the relay is alive (pong included)
+    relayLastPong = Date.now()
     let msg
     try { msg = JSON.parse(raw.toString()) } catch { return }
+    if (msg.type === 'pong') return
     msg = decryptMessage(msg)
     switch (msg.type) {
       case 'registered': {

@@ -1,6 +1,6 @@
 {
   "name": "@tina_summer/codepocket-darwin-x64",
-  "version": "2.6.5",
+  "version": "2.6.8",
   "description": "CodePocket Hub binary for macOS x64",
   "os": [
     "darwin"

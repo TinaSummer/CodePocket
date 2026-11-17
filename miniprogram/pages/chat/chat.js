@@ -51,6 +51,7 @@ Page({
     thinkingSeconds: 0,
     sending: false,
     scrollToId: '',
+    anchorScrollTop: 0, // only written when compensating a history prepend
     aborting: false,
     uploading: false,
     selectedImage: null, // { path, base64 }
@@ -80,6 +81,8 @@ Page({
   _thinkingStartTime: 0,
   _isNearBottom: true,
   _viewportHeight: 0,
+  _userDragging: false, // true between binddragstart / binddragend (user touch only)
+  _lastScrollTop: 0,
   _lastMsgHash: '',
   _aborted: false,
   _hasMoreMessages: false,
@@ -125,19 +128,42 @@ Page({
     }
   },
 
+  onDragStart() {
+    this._userDragging = true
+  },
+
+  onDragEnd() {
+    this._userDragging = false
+  },
+
   onScroll(e) {
     const { scrollTop, scrollHeight, deltaY } = e.detail
-    // deltaY > 0 means scrolling down, deltaY < 0 means scrolling up
-    if (deltaY !== undefined && deltaY < -50) {
-      this._isNearBottom = false
-    }
-    // Only genuinely pinned to the bottom re-enables auto-scroll.
-    // 200px was too generous — reading a message near the bottom kept
-    // counting as "at bottom" and every reload yanked the view down.
+    this._lastScrollTop = scrollTop
     const viewportHeight = this._viewportHeight
-    if (viewportHeight && scrollTop + viewportHeight >= scrollHeight - 60) {
-      this._isNearBottom = true
+    const atBottom = !!viewportHeight && scrollTop + viewportHeight >= scrollHeight - 60
+
+    // Unpin on ANY upward movement, however slow. bindscroll fires per
+    // frame during a drag, so a single event's deltaY is small — the old
+    // `deltaY < -50` unpin only caught fast flicks, and slow reading
+    // scrolls kept auto-follow enabled, so every reload during streaming
+    // yanked the view back down.
+    //  - finger-down drag (deltaY < 0 while _userDragging) → slow scrolls,
+    //    even inside the bottom epsilon
+    //  - deltaY < -50 → fast flicks + momentum after the finger lifts
+    const draggingUp = this._userDragging && deltaY !== undefined && deltaY < 0
+    const flickUp = deltaY !== undefined && deltaY < -50
+
+    // Outside those gestures, geometry is authoritative (covers any scroll
+    // speed and environments where deltaY is undefined) — EXCEPT while our
+    // own scrollToBottom animation passes through non-bottom positions.
+    const animating = Date.now() < (this._programmaticScrollUntil || 0)
+
+    if (draggingUp || flickUp) {
+      this._isNearBottom = false
+    } else if (!animating) {
+      this._isNearBottom = atBottom
     }
+
     // Clear stale scrollToId so setData doesn't re-trigger it
     if (this.data.scrollToId && !this._isNearBottom) {
       this.setData({ scrollToId: '' })
@@ -181,6 +207,9 @@ Page({
   },
 
   onShow() {
+    // A drag that ended off-page (incoming call, home swipe) never fires
+    // dragend — clear the flag so a stale "dragging" state can't unpin.
+    this._userDragging = false
     const relay = require('../../utils/relay')
     // Restore YOLO mode state
     const savedYolo = wx.getStorageSync(`yolo_${this.data.sessionId}`)
@@ -377,6 +406,17 @@ Page({
     }
   },
 
+  // Measure a node's viewport-space top (for scroll anchoring). Returns
+  // null when the node can't be measured.
+  _measureRectTop(selector) {
+    return new Promise((resolve) => {
+      wx.createSelectorQuery()
+        .select(selector)
+        .boundingClientRect((rect) => resolve(rect ? rect.top : null))
+        .exec()
+    })
+  },
+
   async loadMoreMessages() {
     if (this._loadingMore || !this._hasMoreMessages || !this._nextBeforeSeq) return
     this._loadingMore = true
@@ -384,6 +424,12 @@ Page({
 
     const relay = require('../../utils/relay')
     try {
+      // Scroll anchoring: remember where the current first message sits.
+      // After prepending history, the same scrollTop would show completely
+      // different (later) content — felt like the page scrolling itself.
+      const hasCurrent = this.data.messages.length > 0
+      const prevFirstTop = hasCurrent ? await this._measureRectTop('#msg-0') : null
+
       const data = await relay.getMessages(this.data.sessionId, { beforeSeq: this._nextBeforeSeq })
       const raw = data.messages || []
       if (raw.length === 0) {
@@ -407,8 +453,21 @@ Page({
       // Append current messages (re-parsed with fresh parser state)
       const currentParsed = this.data.messages.map(m => ({ ...m }))
       const finalMessages = [...merged, ...currentParsed]
+      const prependedCount = merged.length
 
-      this.setData({ messages: finalMessages, loadingMore: false })
+      this.setData({ messages: finalMessages, loadingMore: false }, async () => {
+        // The old first message now sits prependedCount slots down. Put the
+        // viewport back on the same content: target scrollTop = rect delta
+        // + current scrollTop (the rect delta alone is only valid if the
+        // user didn't scroll while the fetch was in flight).
+        if (prevFirstTop === null) return
+        const newFirstTop = await this._measureRectTop(`#msg-${prependedCount}`)
+        if (newFirstTop === null) return
+        const shift = newFirstTop - prevFirstTop
+        if (Math.abs(shift) > 2) {
+          this.setData({ anchorScrollTop: (this._lastScrollTop || 0) + shift })
+        }
+      })
     } catch (e) {
       console.error('[chat] loadMoreMessages failed', e)
       this.setData({ loadingMore: false })
@@ -1077,24 +1136,6 @@ Page({
         const filtered = filter === 'all' ? todos : todos.filter((t) => filter === 'completed' ? t.completed : !t.completed)
         result = { success: true, todos: filtered }
 
-      } else if (tool === 'phone_location_get') {
-        result = { success: false, error: '定位接口暂无权限，请在微信公众平台申请后使用' }
-
-      } else if (tool === 'phone_location_track') {
-        result = { success: false, error: '定位接口暂无权限，请在微信公众平台申请后使用' }
-
-      } else if (tool === 'phone_map_show') {
-        // Store params for map page, then navigate
-        wx.setStorageSync('mapShowData', {
-          markers: params.markers || [],
-          polyline: params.polyline || [],
-          title: params.title || '地图',
-          actionId,
-        })
-        wx.navigateTo({ url: '/pages/map/map' })
-        // Response will be sent by map page when user taps "完成"
-        return
-
       } else if (tool === 'phone_notification_send') {
         wx.showToast({ title: params.title, icon: 'none', duration: 3000 })
         result = { success: true, message: '通知已显示' }
@@ -1102,9 +1143,6 @@ Page({
       } else if (tool === 'phone_clipboard_write') {
         wx.setClipboardData({ data: params.text || '' })
         result = { success: true, message: '已复制到剪贴板' }
-
-      } else if (tool === 'phone_location_stop') {
-        result = { success: false, error: '定位接口暂无权限，请在微信公众平台申请后使用' }
 
       } else {
         result = { success: false, error: `未知工具: ${tool}` }
@@ -1131,7 +1169,15 @@ Page({
 
   scrollToBottom() {
     setTimeout(() => {
-      const id = `msg-${this.data.messages.length - 1}`
+      // Anchor on the trailing spacer, not the last message: with a long
+      // last message scroll-into-view aligns its *top* with the viewport,
+      // so the "bottom" scroll landed mid-content and visually glided a
+      // long way. The spacer always sits at the true bottom, and landing
+      // there keeps the at-bottom check in onScroll consistent.
+      const id = 'bottom-anchor'
+      // Mark this scroll as programmatic so onScroll doesn't treat the
+      // animation's intermediate positions as the user leaving the bottom.
+      this._programmaticScrollUntil = Date.now() + 600
       this.setData({ scrollToId: id })
       // Clear after scroll completes so it doesn't stick around
       setTimeout(() => {

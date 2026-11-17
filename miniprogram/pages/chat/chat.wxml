@@ -20,10 +20,13 @@
     class="chat-messages {{remoteControlled || queuedCount > 0 ? 'has-status-bar' : ''}}"
     scroll-y
     scroll-into-view="{{scrollToId}}"
+    scroll-top="{{anchorScrollTop}}"
     scroll-with-animation
     enhanced
     show-scrollbar="{{false}}"
     bindscroll="onScroll"
+    binddragstart="onDragStart"
+    binddragend="onDragEnd"
     bindscrolltoupper="loadMoreMessages"
     upper-threshold="200"
   >
@@ -273,7 +276,7 @@
       <text class="compact-text">压缩中{{compactProgress ? ' ' + compactProgress + '%' : '...'}}</text>
     </view>
 
-    <view style="height: 120rpx;"></view>
+    <view id="bottom-anchor" style="height: 120rpx;"></view>
   </scroll-view>
 
   <!-- ═══════════════════════════════════

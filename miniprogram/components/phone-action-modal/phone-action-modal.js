@@ -2,8 +2,6 @@ const TOOL_TITLES = {
   phone_calendar_add: '添加日程',
   phone_todo_add: '添加待办',
   phone_todo_complete: '完成待办',
-  phone_location_get: '获取位置',
-  phone_location_track: '轨迹追踪',
   phone_notification_send: '发送通知',
   phone_clipboard_write: '写入剪贴板',
 }

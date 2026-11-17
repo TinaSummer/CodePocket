@@ -4,7 +4,6 @@
     "pages/settings/settings",
     "pages/chat/chat",
     "pages/setup/setup",
-    "pages/map/map",
     "pages/share-preview/share-preview",
     "pages/guide/guide"
   ],

@@ -18,7 +18,6 @@ const crypto = require('crypto')
 const nacl = require('tweetnacl')
 const { HttpsProxyAgent } = require('https-proxy-agent')
 const { startMcpServer, handlePhoneActionResponse: onPhoneActionResponse } = require('../src/mcp-server')
-const { runTestCli } = require('../src/mcp-client')
 
 // ── Proxy detection ──
 
@@ -226,12 +225,6 @@ async function isHubRunning(hubUrl) {
   } catch { return false }
 }
 
-// 'test' subcommand — standalone
-if (args[0] === 'test') {
-  runTestCli(args.slice(1))
-  return
-}
-
 // ── Background mode helpers ──
 
 const PID_FILE = path.join(CONFIG_DIR, 'codepocket.pid')
@@ -406,6 +399,7 @@ let jwt = ''
 let relayWs = null
 let relayPingInterval = null
 let relayLastPong = 0
+let _relayOpenedAt = 0
 let hubBin = findHubBin()
 let relayConnectFailures = 0
 
@@ -693,6 +687,7 @@ function connectRelay() {
   relayWs = new WebSocket(relayUrl, wsOptions)
 
   relayWs.on('open', () => {
+    _relayOpenedAt = Date.now()
     relayConnectFailures = 0
     relayWs.send(JSON.stringify({
       type: 'register',
@@ -778,7 +773,8 @@ function connectRelay() {
     }
   })
 
-  relayWs.on('close', () => {
+  relayWs.on('close', (code, reason) => {
+    log(`[DEBUG:relay] ws closed: code=${code} reason=${reason ? Buffer.from(reason).toString() : ''} livedSec=${Math.round((Date.now() - _relayOpenedAt) / 1000)}`)
     if (relayPingInterval) { clearInterval(relayPingInterval); relayPingInterval = null }
     relayWs = null
     relayConnectFailures++

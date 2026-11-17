@@ -47,20 +47,6 @@
         </view>
       </block>
 
-      <!-- Location get -->
-      <block wx:elif="{{tool === 'phone_location_get'}}">
-        <view class="modal-item">
-          <text class="modal-value">请求获取当前位置</text>
-        </view>
-      </block>
-
-      <!-- Location track -->
-      <block wx:elif="{{tool === 'phone_location_track'}}">
-        <view class="modal-item">
-          <text class="modal-value">请求追踪位置 {{params.duration || 300}}秒</text>
-        </view>
-      </block>
-
       <!-- Notification send -->
       <block wx:elif="{{tool === 'phone_notification_send'}}">
         <view class="modal-item" wx:if="{{params.title}}">

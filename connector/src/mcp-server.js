@@ -63,30 +63,6 @@ const TOOLS = [
     },
   },
   {
-    name: 'phone_location_get',
-    description: 'Get the phone current GPS location. The user will be asked for permission.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'phone_location_track',
-    description: 'Start tracking the phone GPS location in the background. Points are collected until phone_location_stop is called. Returns immediately.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'phone_location_stop',
-    description: 'Stop GPS location tracking and return all collected coordinate points since tracking started.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
     name: 'phone_notification_send',
     description: 'Send a notification to the phone. The user will confirm on their phone.',
     inputSchema: {
@@ -108,53 +84,6 @@ const TOOLS = [
         text: { type: 'string', description: 'Text to write to clipboard' },
       },
       required: ['text'],
-    },
-  },
-  {
-    name: 'phone_map_show',
-    description: 'Show a map with markers and/or polyline on the phone screen. The user will see the map and confirm when done.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        markers: {
-          type: 'array',
-          description: 'Marker points to display on the map',
-          items: {
-            type: 'object',
-            properties: {
-              latitude: { type: 'number', description: 'Marker latitude' },
-              longitude: { type: 'number', description: 'Marker longitude' },
-              title: { type: 'string', description: 'Marker label text' },
-            },
-            required: ['latitude', 'longitude'],
-          },
-        },
-        polyline: {
-          type: 'array',
-          description: 'Polylines to draw on the map',
-          items: {
-            type: 'object',
-            properties: {
-              points: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    latitude: { type: 'number' },
-                    longitude: { type: 'number' },
-                    timestamp: { type: 'number', description: 'Unix timestamp ms (optional, for speed calc)' },
-                  },
-                  required: ['latitude', 'longitude'],
-                },
-              },
-              color: { type: 'string', description: 'Line color, e.g. #FF0000', default: '#1677FF' },
-              width: { type: 'number', description: 'Line width in pixels', default: 4 },
-            },
-            required: ['points'],
-          },
-        },
-        title: { type: 'string', description: 'Map page title', default: '地图' },
-      },
     },
   },
 ]
